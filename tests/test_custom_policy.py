@@ -13,7 +13,16 @@ import pytest
 import yaml
 
 from dlp_proxy import policy
-from dlp_proxy.custom_rules import compile_custom_rules, scan_rules
+from dlp_proxy.custom_rules import (
+    MAX_CONTEXT_GROUPS,
+    MAX_CONTEXT_LITERAL_CHARS,
+    MAX_CONTEXT_LITERALS_PER_GROUP,
+    MAX_CONTEXT_WINDOW_CHARS,
+    MIN_CONTEXT_GROUPS,
+    MIN_CONTEXT_WINDOW_CHARS,
+    compile_custom_rules,
+    scan_rules,
+)
 from dlp_proxy.detectors import Finding
 from dlp_proxy.detectors.engine import Scanner
 
@@ -113,6 +122,263 @@ def test_custom_literal_and_regex_are_scoped(tmp_path: Path) -> None:
         method="POST",
         path="/v1/hr/export",
     )
+
+
+def test_contextual_matcher_requires_every_literal_group_within_window(
+    tmp_path: Path,
+) -> None:
+    custom_rule = {
+        "id": "synthetic-context",
+        "kind": "document_context",
+        "action": "block",
+        "matcher": {
+            "type": "contextual",
+            "groups": [
+                ["SYNTH+A(1)", "SYNTH-BETA"],
+                ["[RESTRICTED]?"],
+                ["SYNTH-EXPORT"],
+            ],
+            "window_chars": 80,
+            "ignore_case": True,
+        },
+    }
+    policy_path = _write_yaml(
+        tmp_path / "contextual-policy.yaml",
+        _policy_data(custom_rules=[custom_rule]),
+    )
+    loaded = policy.load(str(policy_path))
+    rules = loaded.custom_rules
+    assert loaded.rule_actions["custom:synthetic-context"] == "block"
+
+    text = "prefix synth+a(1) for [restricted]? SYNTH-EXPORT suffix"
+    findings = scan_rules(
+        text,
+        rules,
+        direction="request",
+        method="POST",
+        path="/v1/chat",
+        timeout_ms=25,
+    )
+    assert len(findings) == 1
+    assert findings[0].rule == "custom:synthetic-context"
+    assert findings[0].sample == "***"
+    assert text[findings[0].start : findings[0].end] == (
+        "synth+a(1) for [restricted]? SYNTH-EXPORT"
+    )
+
+    missing_group = text.replace("SYNTH-EXPORT", "SYNTH-SAFE")
+    assert not scan_rules(
+        missing_group,
+        rules,
+        direction="request",
+        method="POST",
+        path="/v1/chat",
+        timeout_ms=25,
+    )
+
+    outside_window = "SYNTH+A(1) " + ("x" * 80) + " [RESTRICTED]? SYNTH-EXPORT"
+    assert not scan_rules(
+        outside_window,
+        rules,
+        direction="request",
+        method="POST",
+        path="/v1/chat",
+        timeout_ms=25,
+    )
+
+
+def test_contextual_matcher_escapes_regex_metacharacters() -> None:
+    rules = compile_custom_rules(
+        [
+            {
+                "id": "escaped-context",
+                "action": "alert",
+                "matcher": {
+                    "type": "contextual",
+                    "groups": [["SYNTH.*ALPHA"], ["SYNTH[LOCKED]"]],
+                    "window_chars": 64,
+                },
+            }
+        ],
+        policy.VALID_ACTIONS,
+    )
+    assert not scan_rules(
+        "SYNTH123ALPHA near SYNTHL",
+        rules,
+        direction="request",
+        method="POST",
+        path="/",
+        timeout_ms=25,
+    )
+    findings = scan_rules(
+        "SYNTH.*ALPHA near SYNTH[LOCKED]",
+        rules,
+        direction="request",
+        method="POST",
+        path="/",
+        timeout_ms=25,
+    )
+    assert len(findings) == 1
+    assert "SYNTH.*ALPHA" not in repr(rules)
+
+
+@pytest.mark.parametrize(
+    "matcher,match",
+    [
+        (
+            {"type": "contextual", "groups": [["SYNTH-ONLY"]], "window_chars": 64},
+            "groups count",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [[f"SYNTH-{index}"] for index in range(9)],
+                "window_chars": 64,
+            },
+            "groups count",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [[f"SYNTH-{index}" for index in range(9)], ["SYNTH-B"]],
+                "window_chars": 64,
+            },
+            "invalid group",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["AB"], ["SYNTH-B"]],
+                "window_chars": 64,
+            },
+            "literal length",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTH-A"], ["SYNTH-A"]],
+                "window_chars": 64,
+            },
+            "across groups",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTH-ALPHA-LONG"], ["ALPHA"]],
+                "window_chars": 64,
+            },
+            "overlapping literals",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTH-A"], ["SYNTH-B"]],
+                "window_chars": 15,
+            },
+            "window_chars",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTHETIC-LITERAL-LONG"], ["SYNTH-B"]],
+                "window_chars": 16,
+            },
+            "too small",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTH-A"], ["SYNTH-B"]],
+                "window_chars": 1025,
+            },
+            "window_chars",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTH-A"], ["SYNTH-B"]],
+                "window_chars": True,
+            },
+            "window_chars",
+        ),
+        (
+            {
+                "type": "contextual",
+                "groups": [["SYNTH-A"], ["SYNTH-B"]],
+                "window_chars": 64,
+                "pattern": "SYNTH-SECRET-RAW",
+            },
+            "unsupported option",
+        ),
+    ],
+)
+def test_contextual_matcher_rejects_unsafe_bounds(matcher: dict, match: str) -> None:
+    with pytest.raises(ValueError, match=match) as caught:
+        compile_custom_rules(
+            [{"id": "invalid-context", "action": "block", "matcher": matcher}],
+            policy.VALID_ACTIONS,
+        )
+    assert "SYNTH-SECRET-RAW" not in str(caught.value)
+
+
+def test_contextual_match_flood_fails_closed_with_one_policy_error() -> None:
+    rules = compile_custom_rules(
+        [
+            {
+                "id": "bounded-context",
+                "action": "alert",
+                "matcher": {
+                    "type": "contextual",
+                    "groups": [["SYNTH-GROUP-A"], ["SYNTH-GROUP-B"]],
+                    "window_chars": 64,
+                },
+            }
+        ],
+        policy.VALID_ACTIONS,
+    )
+    started = time.perf_counter()
+    findings = scan_rules(
+        " ".join(["SYNTH-GROUP-A"] * 101) + " SYNTH-GROUP-B",
+        rules,
+        direction="request",
+        method="POST",
+        path="/",
+        timeout_ms=25,
+    )
+    assert time.perf_counter() - started < 1.0
+    assert len(findings) == 1
+    assert findings[0].kind == "policy_error"
+    assert findings[0].rule == "custom-match-limit:bounded-context"
+
+
+def test_helm_schema_matches_contextual_runtime_bounds() -> None:
+    schema = json.loads(
+        Path("deploy/helm/dlp-proxy/values.schema.json").read_text(encoding="utf-8")
+    )
+    contextual = schema["definitions"]["contextualMatcher"]
+    groups = contextual["properties"]["groups"]
+    group = groups["items"]
+    literal = group["items"]
+    window = contextual["properties"]["window_chars"]
+
+    assert contextual["properties"]["type"]["const"] == "contextual"
+    assert contextual["required"] == ["type", "groups", "window_chars"]
+    assert (groups["minItems"], groups["maxItems"]) == (
+        MIN_CONTEXT_GROUPS,
+        MAX_CONTEXT_GROUPS,
+    )
+    assert group["maxItems"] == MAX_CONTEXT_LITERALS_PER_GROUP
+    assert literal["maxLength"] == MAX_CONTEXT_LITERAL_CHARS
+    assert (window["minimum"], window["maximum"]) == (
+        MIN_CONTEXT_WINDOW_CHARS,
+        MAX_CONTEXT_WINDOW_CHARS,
+    )
+    matcher_refs = schema["definitions"]["customRule"]["properties"]["matcher"][
+        "oneOf"
+    ]
+    assert {item["$ref"] for item in matcher_refs} >= {
+        "#/definitions/contextualMatcher"
+    }
 
 
 def test_protected_literal_and_bounded_sha256_token(tmp_path: Path) -> None:

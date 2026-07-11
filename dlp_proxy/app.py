@@ -56,6 +56,7 @@ _TEXTUAL_TYPES = (
 _MAX_QUERY_BYTES = 16 * 1024
 _MAX_QUERY_FIELDS = 128
 _PATH_DECODE_ROUNDS = 5
+_SSE_BLOCKED_EVENT = b'event: dlp_blocked\ndata: {"error":"dlp_blocked"}\n\n'
 
 
 def _connection_header_tokens(values: Iterable[str]) -> frozenset[str]:
@@ -237,6 +238,169 @@ def _streaming_upstream_response(
                 yield chunk
         finally:
             await upstream_response.aclose()
+
+    response = StreamingResponse(relay(), status_code=upstream_response.status_code)
+    response.raw_headers = _upstream_headers(upstream_response, content_length=None)
+    return response
+
+
+class _SSEFramer:
+    """Incrementally split an SSE byte stream on blank lines.
+
+    CRLF is one line ending (not two), and a trailing CR is held until the
+    next byte resolves whether it belongs to CRLF. The parser keeps offsets so
+    a long event is processed in linear time rather than rescanned per chunk.
+    """
+
+    __slots__ = ("buffer", "line_start", "scan_pos")
+
+    def __init__(self) -> None:
+        self.buffer = bytearray()
+        self.scan_pos = 0
+        self.line_start = 0
+
+    def feed(self, chunk: bytes) -> None:
+        self.buffer.extend(chunk)
+
+    def pop(self, *, eof: bool = False) -> bytes | None:
+        while self.scan_pos < len(self.buffer):
+            current = self.buffer[self.scan_pos]
+            if current == 0x0A:  # LF
+                line_end = self.scan_pos
+                newline_end = self.scan_pos + 1
+            elif current == 0x0D:  # CR or CRLF
+                if self.scan_pos + 1 == len(self.buffer) and not eof:
+                    return None
+                line_end = self.scan_pos
+                newline_end = self.scan_pos + 1
+                if (
+                    self.scan_pos + 1 < len(self.buffer)
+                    and self.buffer[self.scan_pos + 1] == 0x0A
+                ):
+                    newline_end += 1
+            else:
+                self.scan_pos += 1
+                continue
+
+            blank_line = line_end == self.line_start
+            self.scan_pos = newline_end
+            self.line_start = newline_end
+            if blank_line:
+                frame = bytes(self.buffer[:newline_end])
+                del self.buffer[:newline_end]
+                self.scan_pos = 0
+                self.line_start = 0
+                return frame
+        return None
+
+    def take_tail(self) -> bytes:
+        tail = bytes(self.buffer)
+        self.clear()
+        return tail
+
+    def clear(self) -> None:
+        self.buffer.clear()
+        self.scan_pos = 0
+        self.line_start = 0
+
+    def __len__(self) -> int:
+        return len(self.buffer)
+
+
+def _is_event_stream(content_type: str) -> bool:
+    return content_type.partition(";")[0].strip().lower() == "text/event-stream"
+
+
+def _block_sse_control(ctx: Ctx, control: str, *, oversized: bool = False) -> tuple[bytes, bool]:
+    if oversized:
+        ctx.metrics["oversized.response"] += 1
+    _control_decision(ctx, "response", control, "block")
+    ctx.metrics["blocked.response"] += 1
+    ctx.metrics["sse.blocked"] += 1
+    return _SSE_BLOCKED_EVENT, True
+
+
+def _inspect_sse_event(event: bytes, ctx: Ctx) -> tuple[bytes, bool]:
+    """Inspect one complete SSE frame, failing closed on unsafe framing data."""
+    if len(event) > ctx.pol.max_body_bytes:
+        return _block_sse_control(ctx, "oversized-sse-event", oversized=True)
+    try:
+        text = event.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return _block_sse_control(ctx, "invalid-sse-utf8")
+
+    findings = ctx.scan(text, "response")
+    if not findings:
+        ctx.metrics["sse.event"] += 1
+        return event, False
+    new_text, blocking = apply_policy(text, findings, ctx, "response")
+    if blocking:
+        ctx.metrics["blocked.response"] += 1
+        ctx.metrics["sse.blocked"] += 1
+        return _SSE_BLOCKED_EVENT, True
+    ctx.metrics["sse.event"] += 1
+    if new_text == text:
+        return event, False
+    ctx.metrics["sse.redacted"] += 1
+    return new_text.encode("utf-8"), False
+
+
+def _sse_upstream_response(
+    upstream_response: httpx.Response,
+    iterator: AsyncIterator[bytes],
+    ctx: Ctx,
+    started: float,
+) -> StreamingResponse:
+    """Inspect and release one bounded UTF-8 SSE event at a time."""
+
+    async def relay() -> AsyncIterator[bytes]:
+        framer = _SSEFramer()
+        completed = False
+        try:
+            async for chunk in iterator:
+                framer.feed(chunk)
+                while event := framer.pop():
+                    inspected, blocked = _inspect_sse_event(event, ctx)
+                    yield inspected
+                    if blocked:
+                        return
+                if len(framer) > ctx.pol.max_body_bytes:
+                    # Do not retain or reflect an attacker-controlled oversized
+                    # partial event. Strict event mode is intentionally fail-closed.
+                    framer.clear()
+                    inspected, _ = _block_sse_control(
+                        ctx, "oversized-sse-event", oversized=True
+                    )
+                    yield inspected
+                    return
+
+            while event := framer.pop(eof=True):
+                inspected, blocked = _inspect_sse_event(event, ctx)
+                yield inspected
+                if blocked:
+                    return
+            tail = framer.take_tail()
+            if tail:
+                inspected, blocked = _inspect_sse_event(tail, ctx)
+                yield inspected
+                if blocked:
+                    return
+            completed = True
+        except httpx.HTTPError:
+            ctx.metrics["upstream.error"] += 1
+        finally:
+            await upstream_response.aclose()
+            if completed:
+                elapsed_ms = (time.perf_counter() - started) * 1000
+                audit.log_passthrough(
+                    rid=ctx.rid,
+                    method=ctx.method,
+                    path=ctx.audit_path,
+                    client=ctx.client,
+                    status=upstream_response.status_code,
+                    ms=elapsed_ms,
+                )
+                ctx.metrics["forwarded"] += 1
 
     response = StreamingResponse(relay(), status_code=upstream_response.status_code)
     response.raw_headers = _upstream_headers(upstream_response, content_length=None)
@@ -524,8 +688,8 @@ def create_app(pol: policy_mod.Policy | None = None) -> FastAPI:
             )
 
         # --- response body ------------------------------------------------
-        response_iterator = up_resp.aiter_bytes(chunk_size=64 * 1024)
         if not pol.scan_response:
+            response_iterator = up_resp.aiter_bytes(chunk_size=64 * 1024)
             elapsed_ms = (time.perf_counter() - started) * 1000
             audit.log_passthrough(
                 rid=ctx.rid,
@@ -538,6 +702,13 @@ def create_app(pol: policy_mod.Policy | None = None) -> FastAPI:
             mx["forwarded"] += 1
             return _streaming_upstream_response(up_resp, response_iterator)
 
+        resp_ct = up_resp.headers.get("content-type", "")
+        if pol.sse_mode == "event" and _is_event_stream(resp_ct):
+            # Keep upstream chunk cadence so complete events can be released
+            # promptly instead of waiting for the normal 64KiB buffer chunk.
+            return _sse_upstream_response(up_resp, up_resp.aiter_bytes(), ctx, started)
+
+        response_iterator = up_resp.aiter_bytes(chunk_size=64 * 1024)
         response_chunks: list[bytes] = []
         response_size = 0
         response_oversized = False
@@ -588,7 +759,6 @@ def create_app(pol: policy_mod.Policy | None = None) -> FastAPI:
 
         await up_resp.aclose()
         resp_body = b"".join(response_chunks)
-        resp_ct = up_resp.headers.get("content-type", "")
         if resp_body:
             text, enc = _decode(resp_body, resp_ct)
             if text is None:

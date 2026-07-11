@@ -65,6 +65,24 @@ policy:
     max_body_bytes: 1048576
     oversize_action: block
     unscannable_action: block
+    sse_mode: buffer
   expose_block_detail: false
   custom_regex_timeout_ms: 25
+  # Contextual rules use escaped literal groups, never user-supplied regex.
+  # A finding is emitted only when at least one literal from every group fits
+  # inside one bounded character span. Keep real confidential literals in the
+  # existing Secret registry; this conspicuously synthetic example is disabled.
+  # custom_rules:
+  #   - id: synthetic-export-context
+  #     kind: document_context
+  #     action: block
+  #     scope:
+  #       directions: [request, response]
+  #     matcher:
+  #       type: contextual
+  #       groups:
+  #         - [SYNTH-PROJECT-ORION, SYNTH-PROJECT-ATLAS]
+  #         - [SYNTH-EXPORT-BLOCKED, SYNTH-INTERNAL-ONLY]
+  #       window_chars: 120
+  #       ignore_case: true
   custom_rules: []

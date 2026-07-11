@@ -1,9 +1,10 @@
 """Audit logging: one JSON line per policy decision.
 
-Written to stdout (collected by the container runtime / cluster log pipeline)
-and optionally mirrored to ``DLP_AUDIT_FILE``. Raw matched values are never
-logged — findings carry only masked samples. Every line carries the request
-id (``rid``) so decisions and the forward record of one request correlate.
+Written to stdout by default (collected by the container runtime / cluster log
+pipeline), or to stderr when ``DLP_AUDIT_STREAM=stderr`` for stdio protocols.
+Records can also be mirrored to ``DLP_AUDIT_FILE``. Raw matched values are
+never logged — findings carry only masked samples. Every line carries the
+request id (``rid``) so decisions and the forward record correlate.
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ def log_decision(
         "client": client,
         "kind": finding.kind,
         "rule": finding.rule,
+        "source": finding.source,
         "sample": finding.sample,
         "action": action,
     }
@@ -122,7 +124,9 @@ def log_passthrough(
 def _emit(record: dict) -> None:
     line = json.dumps(record, ensure_ascii=False)
     with _lock:
-        print(line, file=sys.stdout, flush=True)
+        use_stderr = os.environ.get("DLP_AUDIT_STREAM", "").lower() == "stderr"
+        stream = sys.stderr if use_stderr else sys.stdout
+        print(line, file=stream, flush=True)
         fh = _file()
         if fh is not None:
             fh.write(line + "\n")

@@ -25,6 +25,23 @@ from dlp_proxy.policy import Policy
 pytestmark = pytest.mark.anyio
 
 
+class SyntheticSSEStream(httpx.AsyncByteStream):
+    """Chunk-controlled synthetic upstream stream; contains no real data."""
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.yielded = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.yielded += 1
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -268,6 +285,131 @@ async def test_response_with_secret_blocked() -> None:
         resp = await client.post("/v1/chat", content=b"what is our aws key")
         assert resp.status_code == 403
         assert resp.json()["error"] == "dlp_blocked"
+
+
+async def test_sse_buffer_mode_remains_the_fail_closed_default() -> None:
+    def sse_upstream(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            content=b"data: synthetic RRN 800101-1000008\n\n",
+            headers={"content-type": "text/event-stream"},
+        )
+
+    async with make_client(sse_upstream) as client:
+        response = await client.post("/v1/chat", content=b"safe")
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "dlp_blocked"
+
+
+async def test_sse_event_mode_redacts_and_alerts_complete_fragmented_events() -> None:
+    payload = (
+        "event: message\r\ndata: clean 한글\r\n\r\n"
+        "data: 합성 전화 010-0000-0000\r\n\r\n"
+        "data: 대외비 표시\r\n\r\n"
+    ).encode()
+    # Split inside one UTF-8 character and across CRLF framing boundaries.
+    split = payload.index("한".encode()) + 1
+    stream = SyntheticSSEStream(
+        [payload[:split], payload[split : split + 9], payload[split + 9 : -1], payload[-1:]]
+    )
+
+    def sse_upstream(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            stream=stream,
+        )
+
+    async with make_client(sse_upstream, make_policy(sse_mode="event")) as client:
+        response = await client.post("/v1/chat", content=b"safe")
+        metrics = await client.get("/metrics")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "clean 한글" in response.text
+    assert "010-0000-0000" not in response.text
+    assert "[REDACTED:phone]" in response.text
+    assert "대외비 표시" in response.text
+    assert 'dlp_decisions_total{action="redact",kind="phone"} 1' in metrics.text
+    assert 'dlp_decisions_total{action="alert",kind="keyword"} 1' in metrics.text
+    assert 'dlp_events_total{event="sse.event"} 3' in metrics.text
+    assert stream.closed
+
+
+async def test_sse_event_mode_emits_generic_block_and_stops_upstream(capsys) -> None:
+    raw = "800101-1000008"
+    stream = SyntheticSSEStream(
+        [
+            b"data: clean synthetic event\n\n",
+            f"data: synthetic RRN {raw}\n\n".encode(),
+            b"data: MUST-NOT-BE-PULLED\n\n",
+        ]
+    )
+
+    def sse_upstream(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=stream,
+        )
+
+    async with make_client(sse_upstream, make_policy(sse_mode="event")) as client:
+        response = await client.post("/v1/chat", content=b"safe")
+        metrics = await client.get("/metrics")
+
+    assert response.status_code == 200  # headers were already committed for the stream
+    assert "clean synthetic event" in response.text
+    assert "event: dlp_blocked" in response.text
+    assert '{"error":"dlp_blocked"}' in response.text
+    assert raw not in response.text
+    assert "MUST-NOT-BE-PULLED" not in response.text
+    assert stream.yielded == 2
+    assert stream.closed
+    assert 'dlp_decisions_total{action="block",kind="rrn"} 1' in metrics.text
+    assert 'dlp_events_total{event="sse.blocked"} 1' in metrics.text
+    audit_output = capsys.readouterr().out
+    assert raw not in audit_output
+
+
+@pytest.mark.parametrize(
+    "unsafe_chunk,control",
+    [
+        (b"data: invalid-utf8-\xff\n\n", "invalid-sse-utf8"),
+        (b"data: " + b"X" * 64, "oversized-sse-event"),
+    ],
+)
+async def test_sse_event_mode_strictly_blocks_invalid_or_oversized_events(
+    unsafe_chunk: bytes, control: str, capsys
+) -> None:
+    stream = SyntheticSSEStream(
+        [b"data: safe\n\n", unsafe_chunk, b"data: MUST-NOT-BE-PULLED\n\n"]
+    )
+
+    def sse_upstream(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=stream,
+        )
+
+    policy = make_policy(sse_mode="event", max_body_bytes=32)
+    async with make_client(sse_upstream, policy) as client:
+        response = await client.post("/v1/chat", content=b"safe")
+
+    assert response.status_code == 200
+    assert "data: safe" in response.text
+    assert "event: dlp_blocked" in response.text
+    assert "invalid-utf8" not in response.text
+    assert "MUST-NOT-BE-PULLED" not in response.text
+    assert stream.closed
+    audit_output = capsys.readouterr().out
+    assert control in audit_output
+    assert '"action": "block"' in audit_output
 
 
 async def test_multiple_set_cookie_preserved() -> None:

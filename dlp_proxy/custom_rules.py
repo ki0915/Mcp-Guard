@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +25,12 @@ MAX_LITERALS_PER_RULE = 100
 MAX_LITERAL_CHARS = 512
 MAX_MATCHES_PER_RULE = 100
 MAX_FINDINGS_PER_TEXT = 256
+MIN_CONTEXT_GROUPS = 2
+MAX_CONTEXT_GROUPS = 8
+MAX_CONTEXT_LITERALS_PER_GROUP = 8
+MIN_CONTEXT_WINDOW_CHARS = 16
+MAX_CONTEXT_WINDOW_CHARS = 1024
+MAX_CONTEXT_LITERAL_CHARS = 128
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 _KIND_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -62,11 +69,12 @@ class CompiledRule:
     matcher: Any = field(default=None, repr=False, compare=False)
     digest: str | None = field(default=None, repr=False)
     token_length: int | None = None
+    context_window_chars: int | None = None
     protected: bool = False
 
 
 def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[CompiledRule, ...]:
-    """Compile non-sensitive literal/regex rules from the policy file."""
+    """Compile bounded non-sensitive literal, regex, or contextual rules."""
     items = _list(raw, "custom_rules")
     if len(items) > MAX_CUSTOM_RULES:
         raise ValueError(f"custom_rules exceeds limit {MAX_CUSTOM_RULES}")
@@ -89,6 +97,7 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
         scope = _scope(item.get("scope"), label, require_narrow=False)
         matcher_raw = _mapping(item.get("matcher"), f"{label}.matcher")
         match_type = matcher_raw.get("type")
+        context_window_chars: int | None = None
         if match_type == "literal":
             _unknown(
                 matcher_raw,
@@ -118,8 +127,47 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
             ignore_case = _boolean(matcher_raw.get("ignore_case", False), f"{label}.matcher")
             compiled = _compile(pattern, ignore_case, label)
             _reject_obvious_empty_match(compiled, label)
+        elif match_type == "contextual":
+            _unknown(
+                matcher_raw,
+                {"type", "groups", "window_chars", "ignore_case"},
+                f"{label}.matcher",
+            )
+            groups = _context_groups(matcher_raw.get("groups"), f"{label}.matcher")
+            ignore_case = _boolean(matcher_raw.get("ignore_case", False), f"{label}.matcher")
+            window_chars = matcher_raw.get("window_chars")
+            if (
+                isinstance(window_chars, bool)
+                or not isinstance(window_chars, int)
+                or not MIN_CONTEXT_WINDOW_CHARS
+                <= window_chars
+                <= MAX_CONTEXT_WINDOW_CHARS
+            ):
+                raise ValueError(f"{label}.matcher.window_chars is invalid")
+            if any(len(value) > window_chars for group in groups for value in group):
+                raise ValueError(f"{label}.matcher.window_chars is too small")
+            context_window_chars = window_chars
+            normalized: set[str] = set()
+            compiled_groups = []
+            for group in groups:
+                dedupe_values = [text.casefold() for text in group] if ignore_case else group
+                if len(set(dedupe_values)) != len(group):
+                    raise ValueError(f"{label}.matcher contains duplicate literals")
+                for value in dedupe_values:
+                    if value in normalized:
+                        raise ValueError(f"{label}.matcher repeats a literal across groups")
+                    if any(value in prior or prior in value for prior in normalized):
+                        raise ValueError(f"{label}.matcher contains overlapping literals")
+                    normalized.add(value)
+                body = "|".join(
+                    regex.escape(text) for text in sorted(group, key=len, reverse=True)
+                )
+                compiled_groups.append(_compile(f"(?:{body})", ignore_case, label))
+            compiled = tuple(compiled_groups)
         else:
-            raise ValueError(f"{label}.matcher.type must be literal or regex")
+            raise ValueError(
+                f"{label}.matcher.type must be literal, regex, or contextual"
+            )
         out.append(
             CompiledRule(
                 id=rule_id,
@@ -129,6 +177,7 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
                 scope=scope,
                 match_type=str(match_type),
                 matcher=compiled,
+                context_window_chars=context_window_chars,
             )
         )
     return tuple(out)
@@ -233,6 +282,14 @@ def scan_rules(
         if rule.match_type == "sha256":
             digest_rules.setdefault(str(rule.digest), []).append(rule)
             continue
+        if rule.match_type == "contextual":
+            contextual = _scan_contextual_rule(text, rule, timeout)
+            if contextual and contextual[0].kind == "policy_error":
+                return contextual
+            findings.extend(contextual)
+            if len(findings) > MAX_FINDINGS_PER_TEXT:
+                return [_policy_error(text, "finding-limit", "global")]
+            continue
         count = 0
         try:
             for match in rule.matcher.finditer(text, timeout=timeout):
@@ -278,6 +335,96 @@ def scan_rules(
                 if len(findings) > MAX_FINDINGS_PER_TEXT:
                     return [_policy_error(text, "finding-limit", "global")]
     return findings
+
+
+def _scan_contextual_rule(
+    text: str, rule: CompiledRule, timeout: float
+) -> list[Finding]:
+    """Find minimal spans containing one escaped literal from every group.
+
+    ``timeout`` is a shared wall-clock budget for all group scans and the
+    bounded window join, rather than a fresh budget for each group.
+    """
+    patterns = rule.matcher
+    window_chars = rule.context_window_chars
+    if (
+        not isinstance(patterns, tuple)
+        or not patterns
+        or not isinstance(window_chars, int)
+    ):
+        return [_policy_error(text, "context-invalid", rule.id)]
+
+    deadline = time.perf_counter() + timeout
+    occurrences: list[tuple[int, int, int]] = []
+    by_group: list[list[tuple[int, int]]] = []
+    for group_index, pattern in enumerate(patterns):
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            return [_policy_error(text, "context-timeout", rule.id)]
+        count = 0
+        group_occurrences: list[tuple[int, int]] = []
+        try:
+            for match in pattern.finditer(text, overlapped=True, timeout=remaining):
+                count += 1
+                if count > MAX_MATCHES_PER_RULE:
+                    return [_policy_error(text, "match-limit", rule.id)]
+                occurrences.append((match.start(), match.end(), group_index))
+                group_occurrences.append((match.start(), match.end()))
+                if time.perf_counter() >= deadline:
+                    return [_policy_error(text, "context-timeout", rule.id)]
+        except TimeoutError:
+            return [_policy_error(text, "context-timeout", rule.id)]
+        if count == 0:
+            return []
+        by_group.append(group_occurrences)
+
+    occurrences.sort(key=lambda item: (item[0], item[1], item[2]))
+    spans: list[tuple[int, int]] = []
+    seen_spans: set[tuple[int, int]] = set()
+    # Every valid combination has an earliest occurrence. Anchor each bounded
+    # occurrence in turn, then select one fitting occurrence from every other
+    # group. This avoids combinatorial products while correctly ignoring long,
+    # irrelevant overlapping alternatives inside the same character window.
+    for anchor_start, anchor_end, anchor_group in occurrences:
+        limit = anchor_start + window_chars
+        if anchor_end > limit:
+            continue
+        end = anchor_end
+        complete = True
+        for group_index, group_occurrences in enumerate(by_group):
+            if group_index == anchor_group:
+                continue
+            selected_end = next(
+                (
+                    occurrence_end
+                    for occurrence_start, occurrence_end in group_occurrences
+                    if occurrence_start >= anchor_start and occurrence_end <= limit
+                ),
+                None,
+            )
+            if selected_end is None:
+                complete = False
+                break
+            end = max(end, selected_end)
+        span = (anchor_start, end)
+        if complete and span not in seen_spans:
+            seen_spans.add(span)
+            spans.append(span)
+            if len(spans) > MAX_MATCHES_PER_RULE:
+                return [_policy_error(text, "match-limit", rule.id)]
+        if time.perf_counter() >= deadline:
+            return [_policy_error(text, "context-timeout", rule.id)]
+
+    return [
+        Finding(
+            kind=rule.kind,
+            start=start,
+            end=end,
+            rule=rule.rule,
+            sample="***",
+        )
+        for start, end in spans
+    ]
 
 
 def parse_scope(raw: object, label: str, *, require_narrow: bool = False) -> Scope:
@@ -385,6 +532,28 @@ def _string_list(value: object, label: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError(f"{label} must be a string list")
     return value
+
+
+def _context_groups(value: object, label: str) -> list[list[str]]:
+    if not isinstance(value, list) or not (
+        MIN_CONTEXT_GROUPS <= len(value) <= MAX_CONTEXT_GROUPS
+    ):
+        raise ValueError(f"{label}.groups count is invalid")
+    groups: list[list[str]] = []
+    for group in value:
+        if not isinstance(group, list) or not (
+            1 <= len(group) <= MAX_CONTEXT_LITERALS_PER_GROUP
+        ):
+            raise ValueError(f"{label}.groups contains an invalid group")
+        if not all(isinstance(item, str) for item in group):
+            raise ValueError(f"{label}.groups must contain only string literals")
+        if any(
+            len(item) < 3 or len(item) > MAX_CONTEXT_LITERAL_CHARS
+            for item in group
+        ):
+            raise ValueError(f"{label}.groups contains an invalid literal length")
+        groups.append(group)
+    return groups
 
 
 def _unknown(value: dict[str, Any], allowed: set[str], label: str) -> None:

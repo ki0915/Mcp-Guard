@@ -18,6 +18,7 @@ class Finding:
     end: int
     rule: str  # sub-rule that fired, e.g. "aws-access-key"
     sample: str  # masked sample for audit logs
+    source: str = "raw"  # raw/nfkc/digit-compact/base64; never sensitive
 
 
 def mask_sample(value: str, keep: int = 0) -> str:

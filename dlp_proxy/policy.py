@@ -30,6 +30,7 @@ from .detectors import Finding
 
 VALID_ACTIONS = frozenset({"redact", "block", "alert"})
 CONTROL_ACTIONS = frozenset({"block", "alert"})
+SSE_MODES = frozenset({"buffer", "event"})
 PROTECTED_KINDS = frozenset({"rrn", "card", "secret", "confidential", "policy_error"})
 MAX_BODY_BYTES = 16 * 1024 * 1024
 MAX_ALLOWLIST_ENTRIES = 128
@@ -74,6 +75,8 @@ _BUILTIN_RULE_KINDS = {
     "phone-mobile-plain": "phone",
     "phone-landline": "phone",
     "phone-service": "phone",
+    "phone-landline-plain-context": "phone",
+    "phone-service-plain-context": "phone",
     "card-luhn": "card",
     "account-context": "account",
     "aws-access-key": "secret",
@@ -137,6 +140,7 @@ class Policy:
     max_body_bytes: int = 1_048_576
     oversize_action: str = "block"
     unscannable_action: str = "block"
+    sse_mode: str = "buffer"
     expose_block_detail: bool = False
     custom_regex_timeout_ms: int = 25
     custom_rules: tuple[CompiledRule, ...] = field(default_factory=tuple, repr=False)
@@ -192,6 +196,7 @@ class Policy:
             "scan_response": self.scan_response,
             "oversize_action": self.oversize_action,
             "unscannable_action": self.unscannable_action,
+            "sse_mode": self.sse_mode,
         }
 
 
@@ -220,7 +225,14 @@ def load(path: str | None = None, protected_path: str | None = None) -> Policy:
     if strict:
         _unknown(
             scan,
-            {"request", "response", "max_body_bytes", "oversize_action", "unscannable_action"},
+            {
+                "request",
+                "response",
+                "max_body_bytes",
+                "oversize_action",
+                "unscannable_action",
+                "sse_mode",
+            },
             "scan",
         )
         _require(scan, _SCAN_REQUIRED, "scan")
@@ -237,6 +249,9 @@ def load(path: str | None = None, protected_path: str | None = None) -> Policy:
     unscannable_action = _control_action(
         scan.get("unscannable_action", "block"), "scan.unscannable_action"
     )
+    sse_mode = scan.get("sse_mode", "buffer")
+    if not isinstance(sse_mode, str) or sse_mode not in SSE_MODES:
+        raise ValueError("scan.sse_mode must be buffer or event")
     expose_block_detail = _bool(
         data.get("expose_block_detail", False), "expose_block_detail"
     )
@@ -294,6 +309,7 @@ def load(path: str | None = None, protected_path: str | None = None) -> Policy:
         max_body_bytes=max_body_bytes,
         oversize_action=oversize_action,
         unscannable_action=unscannable_action,
+        sse_mode=sse_mode,
         expose_block_detail=expose_block_detail,
         custom_regex_timeout_ms=timeout_ms,
         custom_rules=configured + protected,

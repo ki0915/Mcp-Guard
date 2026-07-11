@@ -34,6 +34,9 @@ scan:
   # Fail closed by default. Set to alert only after accepting the bypass risk.
   oversize_action: block
   unscannable_action: block
+  # buffer preserves the original full-response scan. event inspects each
+  # complete UTF-8 text/event-stream event before releasing it.
+  sse_mode: buffer
 
 # Do not coach probing clients with detector details in shared environments.
 expose_block_detail: false

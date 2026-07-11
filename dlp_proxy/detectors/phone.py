@@ -22,13 +22,23 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         "phone-service",
         re.compile(r"(?<!\d)(?:070[-. ]\d{4}[-. ]\d{4}|1[5-9]\d{2}[-. ]\d{4})(?!\d)"),
     ),
+    ("phone-landline-plain-context", re.compile(r"(?<!\d)(?:02\d{7,8}|0[3-6]\d{8,9})(?!\d)")),
+    ("phone-service-plain-context", re.compile(r"(?<!\d)(?:070\d{8}|1[5-9]\d{6})(?!\d)")),
 ]
+
+_PLAIN_CONTEXT = re.compile(r"전화|연락처|휴대전화|phone|telephone|\btel\b", re.IGNORECASE)
+_CONTEXT_WINDOW = 32
 
 
 def scan(text: str) -> list[Finding]:
     out: list[Finding] = []
     for rule, pattern in _PATTERNS:
         for m in pattern.finditer(text):
+            if rule.endswith("-plain-context"):
+                lo = max(0, m.start() - _CONTEXT_WINDOW)
+                hi = min(len(text), m.end() + _CONTEXT_WINDOW)
+                if not _PLAIN_CONTEXT.search(text[lo:hi]):
+                    continue
             out.append(
                 Finding(
                     kind=KIND,

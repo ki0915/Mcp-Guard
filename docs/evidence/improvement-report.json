@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-11T12:41:08.139729+00:00",
+  "dataset": {
+    "path": "tests/data/evasion_benchmark.json",
+    "sha256": "166aa37c51db7c6445d603eb81f7b3443d9ae6a9330ca0ca1587084e47728945",
+    "synthetic_only": true,
+    "cases": 90,
+    "positive_cases": 60,
+    "benign_cases": 30
+  },
+  "scope": {
+    "baseline": "built-in detectors on raw text only; no transforms or contextual rules",
+    "enhanced": "built-ins plus NFKC, digit compaction, one-pass Base64 and 2 contextual rules",
+    "metric_unit": "case-level expected-detector match"
+  },
+  "environment": {
+    "python": "3.12.13",
+    "implementation": "CPython",
+    "system": "Windows",
+    "machine": "AMD64"
+  },
+  "raw_only_baseline": {
+    "confusion_matrix": {"tp": 10, "fn": 50, "fp": 0, "tn": 30},
+    "positive_cases": 60,
+    "benign_cases": 30,
+    "recall_percent": 16.667,
+    "false_positive_rate_percent": 0.0,
+    "missed_case_ids": [
+      "nfkc-phone-hyphen",
+      "nfkc-phone-dot",
+      "nfkc-landline",
+      "nfkc-rrn-valid",
+      "nfkc-rrn-format",
+      "nfkc-card-visa",
+      "nfkc-card-mastercard",
+      "nfkc-account",
+      "nfkc-confidential",
+      "nfkc-internal-only",
+      "nfkc-openai-shape",
+      "nfkc-aws-shape",
+      "split-mobile-space",
+      "split-mobile-zero-width",
+      "split-mobile-tab",
+      "split-landline",
+      "split-rrn-valid-space",
+      "split-rrn-format-space",
+      "split-rrn-zero-width",
+      "split-card-visa",
+      "split-card-mastercard",
+      "split-card-amex",
+      "split-service-phone",
+      "split-regional-phone",
+      "base64-mobile-hyphen",
+      "base64-mobile-dot",
+      "base64-landline",
+      "base64-rrn-valid",
+      "base64-rrn-format",
+      "base64-card-visa",
+      "base64-card-mastercard",
+      "base64-account",
+      "base64-keyword-korean",
+      "base64-keyword-english",
+      "base64-openai-shape",
+      "base64-aws-shape",
+      "context-merger-ko-1",
+      "context-merger-ko-2",
+      "context-merger-ko-3",
+      "context-merger-en-1",
+      "context-merger-en-2",
+      "context-roadmap-ko-1",
+      "context-roadmap-ko-2",
+      "context-roadmap-ko-3",
+      "context-roadmap-en-1",
+      "context-roadmap-en-2",
+      "residual-double-base64",
+      "residual-percent-body",
+      "residual-slash-split",
+      "residual-semantic-paraphrase"
+    ],
+    "false_positive_case_ids": [],
+    "unexpected_finding_only_case_ids": [],
+    "by_category": {
+      "base64": {"positive":12,"detected":0,"benign":0,"false_positive":0,"recall_percent":0.0,"false_positive_rate_percent":null},
+      "benign-base64": {"positive":0,"detected":0,"benign":4,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-contextual": {"positive":0,"detected":0,"benign":9,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-digit": {"positive":0,"detected":0,"benign":4,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-nfkc": {"positive":0,"detected":0,"benign":3,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-raw": {"positive":0,"detected":0,"benign":10,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "contextual": {"positive":10,"detected":0,"benign":0,"false_positive":0,"recall_percent":0.0,"false_positive_rate_percent":null},
+      "digit-split": {"positive":12,"detected":0,"benign":0,"false_positive":0,"recall_percent":0.0,"false_positive_rate_percent":null},
+      "nfkc": {"positive":12,"detected":0,"benign":0,"false_positive":0,"recall_percent":0.0,"false_positive_rate_percent":null},
+      "raw-control": {"positive":10,"detected":10,"benign":0,"false_positive":0,"recall_percent":100.0,"false_positive_rate_percent":null},
+      "residual": {"positive":4,"detected":0,"benign":0,"false_positive":0,"recall_percent":0.0,"false_positive_rate_percent":null}
+    }
+  },
+  "enhanced": {
+    "confusion_matrix": {"tp": 56, "fn": 4, "fp": 0, "tn": 30},
+    "positive_cases": 60,
+    "benign_cases": 30,
+    "recall_percent": 93.333,
+    "false_positive_rate_percent": 0.0,
+    "missed_case_ids": [
+      "residual-double-base64",
+      "residual-percent-body",
+      "residual-slash-split",
+      "residual-semantic-paraphrase"
+    ],
+    "false_positive_case_ids": [],
+    "unexpected_finding_only_case_ids": [],
+    "by_category": {
+      "base64": {"positive":12,"detected":12,"benign":0,"false_positive":0,"recall_percent":100.0,"false_positive_rate_percent":null},
+      "benign-base64": {"positive":0,"detected":0,"benign":4,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-contextual": {"positive":0,"detected":0,"benign":9,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-digit": {"positive":0,"detected":0,"benign":4,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-nfkc": {"positive":0,"detected":0,"benign":3,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "benign-raw": {"positive":0,"detected":0,"benign":10,"false_positive":0,"recall_percent":null,"false_positive_rate_percent":0.0},
+      "contextual": {"positive":10,"detected":10,"benign":0,"false_positive":0,"recall_percent":100.0,"false_positive_rate_percent":null},
+      "digit-split": {"positive":12,"detected":12,"benign":0,"false_positive":0,"recall_percent":100.0,"false_positive_rate_percent":null},
+      "nfkc": {"positive":12,"detected":12,"benign":0,"false_positive":0,"recall_percent":100.0,"false_positive_rate_percent":null},
+      "raw-control": {"positive":10,"detected":10,"benign":0,"false_positive":0,"recall_percent":100.0,"false_positive_rate_percent":null},
+      "residual": {"positive":4,"detected":0,"benign":0,"false_positive":0,"recall_percent":0.0,"false_positive_rate_percent":null}
+    }
+  },
+  "improvement": {
+    "recall_percentage_points": 76.666,
+    "false_positive_rate_percentage_points": 0.0
+  },
+  "scan_latency": {
+    "raw_only_baseline": {
+      "samples": 18000,
+      "rounds": 200,
+      "cases_per_round": 90,
+      "mean_ms": 0.018014,
+      "p50_ms": 0.0175,
+      "p95_ms": 0.0258,
+      "p99_ms": 0.0415
+    },
+    "enhanced": {
+      "samples": 18000,
+      "rounds": 200,
+      "cases_per_round": 90,
+      "mean_ms": 0.062062,
+      "p50_ms": 0.0573,
+      "p95_ms": 0.1032,
+      "p99_ms": 0.1534
+    },
+    "delta_ms": {
+      "mean_ms": 0.044048,
+      "p50_ms": 0.0398,
+      "p95_ms": 0.0774,
+      "p99_ms": 0.1119
+    }
+  }
+}

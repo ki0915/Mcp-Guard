@@ -20,6 +20,7 @@ def test_load_default_policy() -> None:
     assert pol.kind_actions["rrn"] == "block"
     assert pol.kind_actions["phone"] == "redact"
     assert pol.default_action == "alert"
+    assert pol.sse_mode == "buffer"
 
 
 def test_rule_override_beats_kind() -> None:
@@ -46,4 +47,13 @@ def test_invalid_action_rejected(tmp_path: Path) -> None:
     data["rules"]["rrn"] = "explode"
     bad.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(ValueError, match="invalid action"):
+        policy_mod.load(str(bad))
+
+
+def test_invalid_sse_mode_rejected(tmp_path: Path) -> None:
+    bad = tmp_path / "bad-sse.yaml"
+    data = yaml.safe_load(Path("configs/policy.yaml").read_text(encoding="utf-8"))
+    data["scan"]["sse_mode"] = "unsafe-stream"
+    bad.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="sse_mode must be buffer or event"):
         policy_mod.load(str(bad))

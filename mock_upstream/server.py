@@ -6,12 +6,15 @@ can be exercised); any other path echoes method/path/body.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import time
+from collections.abc import AsyncIterator
 
 import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 app = FastAPI(title="mock-upstream")
 app.state.forwarded_requests = 0
@@ -46,6 +49,25 @@ async def chat(request: Request) -> JSONResponse:
             ],
         }
     )
+
+
+@app.get("/v1/stream")
+async def stream(
+    delay_ms: int = Query(default=25, ge=0, le=1000),
+) -> StreamingResponse:
+    """Emit two clean synthetic SSE events with a controlled inter-event gap."""
+    app.state.forwarded_requests += 1
+
+    async def events() -> AsyncIterator[bytes]:
+        started = time.perf_counter()
+        yield b"event: message\ndata: synthetic first event\n\n"
+        await asyncio.sleep(delay_ms / 1000)
+        gap_ms = (time.perf_counter() - started) * 1000
+        yield (
+            f"event: message\ndata: synthetic second event; server_gap_ms={gap_ms:.3f}\n\n"
+        ).encode("ascii")
+
+    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])

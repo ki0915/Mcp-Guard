@@ -1,0 +1,25 @@
+# SYNTHETIC EXAMPLES ONLY. Copy this file outside the repository, replace the
+# examples locally, and mount it from an existing Kubernetes Secret.
+version: 1
+
+protected_values:
+  - id: synthetic-project-code
+    action: block
+    literal: SYNTH-ORION-ALPHA-7Q9X
+    scope:
+      directions: [request, request-path, request-query, response]
+
+  # A SHA-256 fingerprint can protect one bounded, whitespace-free ASCII token
+  # without storing that token. The exact charset and length contract is required.
+  - id: synthetic-deploy-token
+    action: block
+    sha256: 9bd61dd3c0bb782b290ea6e8eac96b298510992be03a0099055641d8984c6671
+    token:
+      charset: ascii_token
+      length: 28
+    scope:
+      directions: [request, response]
+
+# Exact, expiring exceptions for non-protected detector rules live here too.
+# Entries must include target rules plus direction, HTTP method, and path scope.
+allowlist: []

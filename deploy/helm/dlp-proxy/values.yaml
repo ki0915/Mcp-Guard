@@ -1,0 +1,70 @@
+image:
+  repository: dlp-proxy
+  tag: "0.1.0"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Names of pre-created registry credential Secrets, if the image is private.
+imagePullSecrets: []
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# Upstream the proxy forwards to. For the bundled demo upstream, leave as-is;
+# point at a real LLM API / MCP server in production.
+upstream: http://dlp-proxy-mock-upstream:9000
+
+# Demo echo upstream; disable when proxying a real endpoint.
+mockUpstream:
+  enabled: true
+  image:
+    repository: dlp-mock-upstream
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Opt-in: force pods labeled dlp-egress=via-proxy to egress only through the
+# proxy (plus DNS). Needs a NetworkPolicy-enforcing CNI.
+networkPolicy:
+  enabled: false
+
+# Reference an existing Secret only. Never put real confidential values in
+# values.yaml/--set: Helm stores release values in cluster history.
+protectedValues:
+  existingSecret: ""
+  key: protected-values.yaml
+
+# Detection policy rendered into a ConfigMap and mounted at /etc/dlp/policy.yaml.
+policy:
+  version: 1
+  strict_config: true
+  default_action: alert
+  rules:
+    rrn: block
+    card: block
+    secret: block
+    phone: redact
+    account: redact
+    keyword: alert
+  rule_overrides:
+    rrn-format-only: alert
+  scan:
+    request: true
+    response: true
+    max_body_bytes: 1048576
+    oversize_action: block
+    unscannable_action: block
+  expose_block_detail: false
+  custom_regex_timeout_ms: 25
+  custom_rules: []

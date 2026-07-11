@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dlp-proxy.fullname" . }}-policy
+  labels:
+    {{- include "dlp-proxy.labels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    {{- if .Values.mockUpstream.enabled }}
+    upstream: {{ printf "http://%s-mock-upstream:9000" (include "dlp-proxy.fullname" .) | quote }}
+    {{- else }}
+    upstream: {{ .Values.upstream | quote }}
+    {{- end }}
+{{ toYaml .Values.policy | indent 4 }}

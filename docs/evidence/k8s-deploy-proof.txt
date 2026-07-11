@@ -1,0 +1,92 @@
+K3D / HELM DEPLOYMENT PROOF (SYNTHETIC DATA ONLY)
+==================================================
+
+Measured: 2026-07-11 11:27-11:28 KST
+Cluster: k3d-dlp-proof, Kubernetes local Docker runtime
+Helm: v4.2.2
+Images built locally from this worktree:
+  dlp-proxy:custom-v2
+  dlp-mock-upstream:custom-v2
+
+Preconditions: the two local images were imported into k3d, and the chart's
+existingSecret reference was populated with configs/protected-values.example.yaml.
+That file contains conspicuously synthetic fixtures only. The Secret was patched
+immutable=true; no user/customer data or live credential was used.
+
+Fresh install command
+---------------------
+.tools/helm.exe install dlp-fresh deploy/helm/dlp-proxy \
+  --set-string image.tag=custom-v2 \
+  --set-string mockUpstream.image.tag=custom-v2 \
+  --set-string protectedValues.existingSecret=dlp-protected-synthetic-v2 \
+  --wait --timeout 180s
+
+Result:
+  STATUS: deployed
+  REVISION: 1
+  DESCRIPTION: Install complete
+
+Workload result:
+  deployment/dlp-fresh                       1/1 Available
+  deployment/dlp-fresh-mock-upstream         1/1 Available
+  pod/dlp-fresh-57db6bc58f-9nx9d             1/1 Running, 0 restarts
+  pod/dlp-fresh-mock-upstream-5c44fcdcb8     1/1 Running, 0 restarts
+
+Container/Secret controls:
+  proxy process: uid=10001(dlp) gid=10001(dlp) groups=10001(dlp)
+  protected-values target: mode=0440 owner=0 group=10001
+  Secret immutable: true
+  service-account token: automountServiceAccountToken=false
+  root filesystem: readOnlyRootFilesystem=true
+  Linux capabilities: drop ALL
+  seccomp: RuntimeDefault
+
+Proxy smoke test through kubectl port-forward
+---------------------------------------------
+GET /healthz
+  HTTP 200 {"status":"ok"}
+
+POST synthetic clean request
+  HTTP 200, upstream echo received
+
+POST synthetic phone fixture 010-0000-0000
+  HTTP 200
+  upstream echo content: "가상 연락처는 [REDACTED:phone] 입니다"
+
+POST synthetic checksum fixture 800101-1000008
+  HTTP 403 {"error":"dlp_blocked",...}
+
+POST synthetic protected literal SYNTH-ORION-ALPHA-7Q9X
+  HTTP 403 {"error":"dlp_blocked",...}
+
+POST synthetic protected SHA-token fixture
+  HTTP 403 {"error":"dlp_blocked",...}
+
+The mock upstream's non-sensitive forwarded_requests counter was 2 before the
+three blocked probes and remained 2 afterward. This proves the blocked request
+bodies did not reach the upstream, rather than merely proving a 403 response.
+
+Policy status:
+  status=loaded, custom_rules=0, protected_values=2
+  allowlist_active=0, scan_request=true, scan_response=true
+  oversize_action=block, unscannable_action=block
+
+Representative audit records (samples are fixed, no raw values)
+----------------------------------------------------------------
+  kind=phone rule=phone-mobile sample=*** action=redact
+  kind=rrn rule=rrn-checksum sample=*** action=block
+  kind=confidential rule=protected:synthetic-project-code sample=*** action=block
+  kind=confidential rule=protected:synthetic-deploy-token sample=*** action=block
+
+Leak checks
+-----------
+Searched proxy logs, `helm get values --all`, `helm get manifest`, and the
+policy ConfigMap for all four synthetic raw fixtures. Matches found: 0.
+The Kubernetes Secret itself was intentionally not printed or captured.
+
+Reproduction boundary
+---------------------
+The chart cannot pull a local-only image into an empty cluster. As documented in
+README, build/import the images first, or set image.repository/tag/digest plus
+imagePullSecrets to an accessible registry. After that precondition, the single
+helm install command above creates and waits for every chart-owned workload.

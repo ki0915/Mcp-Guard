@@ -1,0 +1,208 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/proxy
+  MOCK_IMAGE: ghcr.io/${{ github.repository }}/mock-upstream
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install .[dev]
+      - name: Static analysis (ruff + Bandit)
+        run: |
+          ruff check .
+          bandit -q -r dlp_proxy scripts mock_upstream -s B104
+      - name: Unit + e2e tests
+        run: pytest -q
+      - name: Detection accuracy report
+        run: python scripts/accuracy_report.py
+      - name: Validate policy and Helm security schema
+        run: |
+          python scripts/validate_policy.py
+          python scripts/validate_policy.py \
+            --protected-values configs/protected-values.example.yaml
+          helm lint --strict deploy/helm/dlp-proxy
+          helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set protectedValues.existingSecret=dlp-protected-v1 \
+            | grep -q 'DLP_PROTECTED_VALUES_PATH'
+          if helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set networkPolicy.enabld=true >/tmp/invalid-chart.txt 2>&1; then
+            echo 'values.schema.json accepted a misspelled security option' >&2
+            exit 1
+          fi
+          if helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set protectedValues.literal=SYNTHETIC-RAW-VALUE \
+            >/tmp/inline-secret.txt 2>&1; then
+            echo 'values.schema.json accepted an inline protected value' >&2
+            exit 1
+          fi
+          if helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set policy.strict_config=false >/tmp/non-strict-policy.txt 2>&1; then
+            echo 'values.schema.json accepted strict_config=false' >&2
+            exit 1
+          fi
+          if helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set resources.requests.cup=100m >/tmp/bad-resources.txt 2>&1; then
+            echo 'values.schema.json accepted a misspelled resource key' >&2
+            exit 1
+          fi
+          ! helm template dlp-proxy deploy/helm/dlp-proxy | grep -q '^kind: Secret$'
+
+  build-push:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build proxy image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          push: ${{ github.event_name == 'push' }}
+          load: ${{ github.event_name != 'push' }}
+      - name: Build mock upstream image
+        uses: docker/build-push-action@v7
+        with:
+          context: mock_upstream
+          tags: |
+            ${{ env.MOCK_IMAGE }}:${{ github.sha }}
+            ${{ env.MOCK_IMAGE }}:latest
+          push: ${{ github.event_name == 'push' }}
+          load: ${{ github.event_name != 'push' }}
+
+  deploy-k8s:
+    needs: build-push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create k3d cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: ci
+          k3d-version: v5.8.3
+          args: --wait --timeout 180s
+      - name: Pull and import images
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull ${IMAGE}:${{ github.sha }}
+          docker pull ${MOCK_IMAGE}:${{ github.sha }}
+          k3d image import ${IMAGE}:${{ github.sha }} ${MOCK_IMAGE}:${{ github.sha }} -c ci
+      - name: Create synthetic protected-values Secret
+        run: |
+          kubectl create secret generic dlp-protected-v1 \
+            --from-file=protected-values.yaml=configs/protected-values.example.yaml
+          kubectl patch secret dlp-protected-v1 --type=merge \
+            -p '{"immutable":true}'
+      - name: Helm install
+        run: |
+          helm install dlp-proxy deploy/helm/dlp-proxy \
+            --set image.repository=${IMAGE} \
+            --set image.tag=${{ github.sha }} \
+            --set mockUpstream.image.repository=${MOCK_IMAGE} \
+            --set mockUpstream.image.tag=${{ github.sha }} \
+            --set protectedValues.existingSecret=dlp-protected-v1 \
+            --wait --timeout 180s
+      - name: Smoke test through the proxy
+        run: |
+          kubectl wait --for=condition=available deploy/dlp-proxy --timeout=120s
+          kubectl port-forward svc/dlp-proxy 18080:8080 &
+          for i in $(seq 1 20); do curl -sf localhost:18080/healthz && break; sleep 1; done
+          # clean request passes
+          curl -sf -X POST localhost:18080/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"hello"}]}' | tee /tmp/clean.json
+          grep -q 'echo' /tmp/clean.json
+          # phone number is redacted before reaching the echo upstream
+          curl -sf -X POST localhost:18080/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"synthetic phone 010-0000-0000"}]}' | tee /tmp/redacted.json
+          grep -q '\[REDACTED:phone\]' /tmp/redacted.json
+          ! grep -q '010-0000-0000' /tmp/redacted.json
+          before_block=$(curl -sf localhost:18080/stats | python -c \
+            'import json,sys; print(json.load(sys.stdin)["forwarded_requests"])')
+          # RRN must be blocked with 403
+          code=$(curl -s -o /tmp/blocked.json -w '%{http_code}' -X POST localhost:18080/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"합성 주민번호 800101-1000008"}]}')
+          cat /tmp/blocked.json
+          test "$code" = "403"
+          grep -q 'dlp_blocked' /tmp/blocked.json
+          after_rrn=$(curl -sf localhost:18080/stats | python -c \
+            'import json,sys; print(json.load(sys.stdin)["forwarded_requests"])')
+          test "$after_rrn" = "$before_block"
+          # protected literal from the existing Secret must be blocked
+          code=$(curl -s -o /tmp/protected.json -w '%{http_code}' -X POST localhost:18080/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"synthetic code SYNTH-ORION-ALPHA-7Q9X"}]}')
+          test "$code" = "403"
+          grep -q 'dlp_blocked' /tmp/protected.json
+          # SHA-256 token registration must also block the exact bounded token
+          code=$(curl -s -o /tmp/protected-hash.json -w '%{http_code}' -X POST localhost:18080/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"SYNTHETIC_TOKEN_7Q9X2M4P8N6K"}]}')
+          test "$code" = "403"
+          grep -q 'dlp_blocked' /tmp/protected-hash.json
+          after_all_blocks=$(curl -sf localhost:18080/stats | python -c \
+            'import json,sys; print(json.load(sys.stdin)["forwarded_requests"])')
+          test "$after_all_blocks" = "$before_block"
+          # Helm-owned resources must never contain the protected literal.
+          ! helm get values dlp-proxy --all | grep -q 'SYNTH-ORION-ALPHA-7Q9X'
+          ! helm get manifest dlp-proxy | grep -q 'SYNTH-ORION-ALPHA-7Q9X'
+          ! kubectl get configmap dlp-proxy-policy -o yaml | grep -q 'SYNTH-ORION-ALPHA-7Q9X'
+      - name: Show audit log
+        if: always()
+        run: |
+          kubectl logs deploy/dlp-proxy --tail=100 | tee /tmp/dlp-proxy.log || true
+          kubectl get all -o wide | tee /tmp/k8s-resources.txt || true
+          ! grep -q 'SYNTH-ORION-ALPHA-7Q9X' /tmp/dlp-proxy.log
+          ! grep -q 'SYNTHETIC_TOKEN_7Q9X2M4P8N6K' /tmp/dlp-proxy.log
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: k8s-smoke-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            /tmp/clean.json
+            /tmp/redacted.json
+            /tmp/blocked.json
+            /tmp/protected.json
+            /tmp/protected-hash.json
+            /tmp/dlp-proxy.log
+            /tmp/k8s-resources.txt

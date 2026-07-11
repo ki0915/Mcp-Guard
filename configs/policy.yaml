@@ -1,0 +1,58 @@
+# DLP proxy policy — mounted as a ConfigMap in Kubernetes.
+#
+# Actions:
+#   redact — replace the matched span with [REDACTED:<kind>] and forward
+#   block  — reject the request/response with 403
+#   alert  — forward unchanged, audit log only
+
+version: 1
+strict_config: true
+
+upstream: http://localhost:9000
+
+default_action: alert
+
+# Per-detector-kind actions.
+rules:
+  rrn: block        # 주민등록번호: never leaves
+  card: block       # 카드번호 (Luhn-valid)
+  secret: block     # API 키/시크릿
+  phone: redact     # 전화번호: mask but let the request through
+  account: redact   # 계좌번호
+  keyword: alert    # 대외비 등 키워드: 기록만
+
+# Per-rule overrides (beat kind-level actions).
+rule_overrides:
+  # Post-2020 RRNs have no checksum; format-only matches are lower confidence,
+  # so alert instead of block to avoid false-positive outages.
+  rrn-format-only: alert
+
+scan:
+  request: true
+  response: true
+  max_body_bytes: 1048576
+  # Fail closed by default. Set to alert only after accepting the bypass risk.
+  oversize_action: block
+  unscannable_action: block
+
+# Do not coach probing clients with detector details in shared environments.
+expose_block_detail: false
+
+# Each user regex gets this execution budget and a separate 100-match cap.
+custom_regex_timeout_ms: 25
+
+# Non-sensitive classifiers only. Put actual confidential values in the
+# separately mounted protected-values Secret, never in this ConfigMap.
+#
+# custom_rules:
+#   - id: employee-id
+#     kind: business_identifier
+#     action: redact
+#     scope:
+#       directions: [request, response]
+#       methods: [POST]
+#       path_prefixes: [/v1/]
+#     matcher:
+#       type: regex
+#       pattern: '\bEMP-[0-9]{8}\b'
+custom_rules: []

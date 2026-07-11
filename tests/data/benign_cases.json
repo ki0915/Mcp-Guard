@@ -1,0 +1,16 @@
+[
+  {"id": "benign-korean-chat", "text": "내일 오후 3시에 회의실에서 만나요. 자료 준비 부탁드립니다.", "expect_kinds": []},
+  {"id": "benign-english-chat", "text": "Please summarize the attached quarterly report in three bullet points.", "expect_kinds": []},
+  {"id": "benign-datetime", "text": "배포 일정: 2026-07-10 14:30 KST, 롤백 기한 2026-07-11", "expect_kinds": []},
+  {"id": "benign-order-number", "text": "주문번호 20260710-000123 배송 조회 부탁", "expect_kinds": []},
+  {"id": "benign-version", "text": "kubernetes v1.30.2, helm chart 0.1.0, python 3.13.13", "expect_kinds": []},
+  {"id": "benign-epoch", "text": "timestamp: 1720000000000 (ms since epoch)", "expect_kinds": []},
+  {"id": "benign-uuid", "text": "request id 550e8400-e29b-41d4-a716-446655440000", "expect_kinds": []},
+  {"id": "benign-url", "text": "docs: https://example.com/guide?page=2&lang=ko", "expect_kinds": []},
+  {"id": "benign-ip-port", "text": "listen on 192.168.0.10:8080, upstream 10.0.0.2:9000", "expect_kinds": []},
+  {"id": "benign-git-sha", "text": "deployed commit 3f2a9c1 to staging", "expect_kinds": []},
+  {"id": "benign-biz-number", "text": "사업자등록번호 123-45-67890 발행 세금계산서", "expect_kinds": [], "note": "10 digits, hyphenated, but no 계좌/bank context"},
+  {"id": "benign-normal-password-word", "text": "password policy: must be longer than 12 characters", "expect_kinds": []},
+  {"id": "benign-price-like-rrn", "text": "단가 750615 1000002 원입니다", "expect_kinds": [], "note": "space-separated synthetic checksum-valid digits without identity context"},
+  {"id": "benign-quantity-pair", "text": "재고 900101 2000009 개 입고 완료", "expect_kinds": [], "note": "synthetic checksum-valid digits but no identity context"}
+]

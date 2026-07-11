@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dlp-proxy
+description: Outbound DLP proxy for LLM/MCP traffic — Korean PII and secret detection with redact/block/alert policy
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

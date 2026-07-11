@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+.venv/
+.tools/
+.codex-pytest*/
+.secrets/
+protected-values.yaml
+protected-values.*.yaml
+!configs/protected-values.example.yaml

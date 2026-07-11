@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.git
+.github
+tests
+bench
+docs
+deploy
+scripts
+mock_upstream
+.venv

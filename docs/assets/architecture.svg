@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Mcp-Guard outbound DLP architecture</title>
+  <desc id="desc">HTTP and stdio traffic passes through bounded normalization, detectors, policy actions, audit logging, and Kubernetes deployment controls.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#10243b"/>
+    </linearGradient>
+    <linearGradient id="proxy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#133a55"/>
+      <stop offset="1" stop-color="#0d2a40"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".32"/>
+    </filter>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#54c5ff"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#50e3a4"/>
+    </marker>
+    <style>
+      .title{font:700 38px 'Segoe UI','Noto Sans KR',sans-serif;fill:#f4f9ff}
+      .subtitle{font:400 18px 'Segoe UI','Noto Sans KR',sans-serif;fill:#9eb8cf}
+      .h{font:700 23px 'Segoe UI','Noto Sans KR',sans-serif;fill:#f4f9ff}
+      .sh{font:700 17px 'Segoe UI','Noto Sans KR',sans-serif;fill:#dceeff}
+      .body{font:400 15px 'Segoe UI','Noto Sans KR',sans-serif;fill:#bed3e4}
+      .small{font:400 13px 'Segoe UI','Noto Sans KR',sans-serif;fill:#9eb8cf}
+      .mono{font:600 13px Consolas,monospace;fill:#dceeff}
+      .panel{stroke:#2f5d78;stroke-width:2;filter:url(#shadow)}
+      .step{fill:#15384e;stroke:#39728f;stroke-width:1.5}
+      .chip{fill:#102b3c;stroke:#2c617d;stroke-width:1.2}
+      .flow{fill:none;stroke:#54c5ff;stroke-width:4;marker-end:url(#arrowBlue)}
+      .control{fill:none;stroke:#50e3a4;stroke-width:3;stroke-dasharray:9 7;marker-end:url(#arrowGreen)}
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <circle cx="1450" cy="90" r="230" fill="#16466a" opacity=".18"/>
+  <circle cx="100" cy="930" r="260" fill="#0b5a52" opacity=".13"/>
+
+  <text x="70" y="70" class="title">Mcp-Guard · MCP/LLM Outbound DLP</text>
+  <text x="70" y="104" class="subtitle">합성 데이터로 검증된 요청·응답 검사, 정책 집행, 감사 및 Kubernetes 배포 구조</text>
+
+  <!-- Clients -->
+  <rect x="65" y="165" rx="24" ry="24" width="290" height="530" fill="#102437" class="panel"/>
+  <text x="105" y="215" class="h">1. 호출 주체</text>
+  <rect x="95" y="255" rx="16" width="230" height="120" class="step"/>
+  <text x="120" y="292" class="sh">HTTP 애플리케이션</text>
+  <text x="120" y="321" class="body">LLM SDK · Agent · API</text>
+  <text x="120" y="347" class="mono">HTTP / SSE</text>
+  <rect x="95" y="415" rx="16" width="230" height="120" class="step"/>
+  <text x="120" y="452" class="sh">MCP 클라이언트</text>
+  <text x="120" y="481" class="body">로컬 도구 호출</text>
+  <text x="120" y="507" class="mono">stdio JSON-RPC</text>
+  <rect x="95" y="575" rx="14" width="230" height="82" fill="#0b3040" stroke="#26766d" stroke-width="1.5"/>
+  <text x="120" y="608" class="sh">합성 입력만 사용</text>
+  <text x="120" y="635" class="small">실제 개인정보·키를 fixture에 금지</text>
+
+  <!-- Proxy -->
+  <rect x="430" y="145" rx="28" ry="28" width="735" height="660" fill="url(#proxy)" class="panel"/>
+  <text x="470" y="195" class="h">2. DLP 집행 경계</text>
+  <text x="470" y="224" class="small">본문·URL path·query · 양방향 request/response</text>
+
+  <rect x="475" y="260" rx="14" width="190" height="105" class="step"/>
+  <text x="505" y="296" class="sh">Ingress Adapter</text>
+  <text x="505" y="324" class="body">HTTP reverse proxy</text>
+  <text x="505" y="348" class="body">stdio JSON-RPC</text>
+
+  <rect x="705" y="260" rx="14" width="415" height="105" class="step"/>
+  <text x="735" y="296" class="sh">Bounded Scan Views</text>
+  <rect x="735" y="316" rx="9" width="70" height="30" class="chip"/><text x="756" y="336" class="small">Raw</text>
+  <rect x="815" y="316" rx="9" width="72" height="30" class="chip"/><text x="831" y="336" class="small">NFKC</text>
+  <rect x="897" y="316" rx="9" width="105" height="30" class="chip"/><text x="912" y="336" class="small">Digit compact</text>
+  <rect x="1012" y="316" rx="9" width="82" height="30" class="chip"/><text x="1028" y="336" class="small">Base64</text>
+
+  <path d="M665 313 H695" class="flow"/>
+
+  <rect x="475" y="405" rx="14" width="300" height="170" class="step"/>
+  <text x="505" y="443" class="sh">Detection Engine</text>
+  <text x="505" y="474" class="body">• RRN checksum · Phone</text>
+  <text x="505" y="501" class="body">• Card Luhn · Account context</text>
+  <text x="505" y="528" class="body">• API key · Entropy · Keyword</text>
+  <text x="505" y="555" class="body">• Contextual groups · Protected values</text>
+
+  <rect x="815" y="405" rx="14" width="305" height="170" class="step"/>
+  <text x="845" y="443" class="sh">Policy Decision</text>
+  <rect x="845" y="470" rx="9" width="74" height="38" fill="#164f48" stroke="#50e3a4"/><text x="860" y="495" class="body">redact</text>
+  <rect x="930" y="470" rx="9" width="72" height="38" fill="#582e35" stroke="#ff7f7f"/><text x="949" y="495" class="body">block</text>
+  <rect x="1013" y="470" rx="9" width="76" height="38" fill="#55461e" stroke="#ffd166"/><text x="1031" y="495" class="body">alert</text>
+  <text x="845" y="538" class="body">Fail-closed limits · Scoped allowlist</text>
+  <text x="845" y="560" class="small">response block은 이미 전송된 request를 회수하지 못함</text>
+
+  <path d="M775 490 H805" class="flow"/>
+
+  <rect x="475" y="620" rx="14" width="645" height="135" class="step"/>
+  <text x="505" y="657" class="sh">Evidence &amp; Operations</text>
+  <text x="505" y="688" class="body">JSON audit (sample=***) · Prometheus metrics · /policy/status</text>
+  <text x="505" y="717" class="body">SSE: buffer 또는 complete-event 검사 · 16 MiB hard cap · regex timeout</text>
+  <path d="M967 575 V608" class="control"/>
+
+  <!-- External -->
+  <rect x="1240" y="165" rx="24" ry="24" width="295" height="530" fill="#102437" class="panel"/>
+  <text x="1280" y="215" class="h">3. 외부 대상</text>
+  <rect x="1270" y="255" rx="16" width="235" height="120" class="step"/>
+  <text x="1298" y="292" class="sh">외부 LLM API</text>
+  <text x="1298" y="321" class="body">HTTP MCP 서버</text>
+  <text x="1298" y="347" class="mono">HTTPS / SSE</text>
+  <rect x="1270" y="415" rx="16" width="235" height="120" class="step"/>
+  <text x="1298" y="452" class="sh">로컬 MCP Child</text>
+  <text x="1298" y="481" class="body">newline JSON-RPC</text>
+  <text x="1298" y="507" class="mono">stdin ↔ stdout</text>
+  <rect x="1270" y="575" rx="14" width="235" height="82" fill="#352d1b" stroke="#a88a35" stroke-width="1.5"/>
+  <text x="1298" y="608" class="sh">신뢰 경계 밖</text>
+  <text x="1298" y="635" class="small">허용된 데이터만 전달</text>
+
+  <path d="M355 315 H420" class="flow"/>
+  <path d="M355 475 H420" class="flow"/>
+  <path d="M1165 315 H1230" class="flow"/>
+  <path d="M1165 475 H1230" class="flow"/>
+
+  <!-- Config and deployment -->
+  <rect x="190" y="855" rx="18" width="260" height="95" fill="#113a37" stroke="#3aa78f" stroke-width="2" filter="url(#shadow)"/>
+  <text x="220" y="891" class="sh">ConfigMap · Policy</text>
+  <text x="220" y="920" class="small">rules · limits · action · SSE mode</text>
+
+  <rect x="520" y="855" rx="18" width="280" height="95" fill="#392d3f" stroke="#a978c8" stroke-width="2" filter="url(#shadow)"/>
+  <text x="550" y="891" class="sh">Kubernetes Secret</text>
+  <text x="550" y="920" class="small">literal / SHA-256 protected values · 0440</text>
+
+  <rect x="870" y="855" rx="18" width="520" height="95" fill="#182f45" stroke="#4487b0" stroke-width="2" filter="url(#shadow)"/>
+  <text x="900" y="891" class="sh">Docker → Helm → Kubernetes</text>
+  <text x="900" y="920" class="small">non-root 10001 · read-only rootfs · NetworkPolicy · CI smoke</text>
+
+  <path d="M320 855 C320 800 610 815 685 755" class="control"/>
+  <path d="M660 855 C660 810 760 810 820 755" class="control"/>
+  <path d="M1130 855 V815" class="control"/>
+</svg>

@@ -1,0 +1,60 @@
+Mcp-Guard k3d / Helm empirical proof
+====================================
+Measured: 2026-07-12 09:41-09:44 KST
+Data policy: synthetic fixtures only; no user/customer/employee PII or live secret
+
+Environment
+-----------
+Docker Engine: 29.6.1
+k3d: v5.8.3
+k3s: v1.31.5-k3s1
+Helm: v4.2.2
+kubectl client: v1.36.1
+Cluster: dlp-empirical-20260712 (fresh cluster)
+
+Images built from current workspace
+-----------------------------------
+dlp-proxy:empirical-20260712
+  manifest list: sha256:49a98067a5c013809f993b3811f4a56158e17d533c3b827a8ca8c5e9d75e5c71
+dlp-mock-upstream:empirical-20260712
+  manifest list: sha256:e434588adeefb7ec4cc0596e0d05b41a776663716f935e3accf4f2982c89b8e7
+
+Deployment
+----------
+Secret: dlp-protected-v1, immutable=true
+Helm release: dlp-proxy, STATUS=deployed, REVISION=1
+proxy pod: 1/1 Running, restart=0
+mock upstream pod: 1/1 Running, restart=0
+
+Synthetic curl smoke test through port-forward
+----------------------------------------------
+HEALTH=200
+CLEAN=200
+PHONE_REDACTED=True
+RRN_STATUS=403
+UPSTREAM_COUNT_BEFORE=2
+UPSTREAM_COUNT_AFTER=2
+AUDIT_RAW_IDENTIFIER_LEAK=false
+
+Representative masked audit decisions
+---------------------------------------
+kind=phone rule=phone-mobile source=raw sample=*** action=redact
+kind=rrn rule=rrn-checksum source=raw sample=*** action=block
+
+Runtime / secret controls
+-------------------------
+process: uid=10001(dlp) gid=10001(dlp)
+resolved Secret file: mode=0440 owner=root group=10001 regular-file
+runAsNonRoot=true
+readOnlyRootFilesystem=true
+protected literal in Helm manifest=false
+protected literal in Helm values=false
+protected literal in ConfigMap=false
+NetworkPolicy opt-in test: dlp-proxy-force-egress, policyTypes=[Egress]
+
+Interpretation
+--------------
+The unchanged upstream counter proves that the checksum-valid synthetic RRN
+request was rejected before forwarding. The audit check searched the proxy log
+for both synthetic raw identifiers and found neither. This proves only this
+fresh local k3d run; it is not a production availability or adversarial test.

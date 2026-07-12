@@ -30,6 +30,7 @@ from .detectors import Finding
 
 VALID_ACTIONS = frozenset({"redact", "block", "alert"})
 CONTROL_ACTIONS = frozenset({"block", "alert"})
+_BLOCK_ACTION = "block"
 SSE_MODES = frozenset({"buffer", "event"})
 PROTECTED_KINDS = frozenset({"rrn", "card", "secret", "confidential", "policy_error"})
 MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -131,8 +132,13 @@ class AllowlistEntry:
 class Policy:
     upstream: str = "http://localhost:9000"
     default_action: str = "alert"
+    # These "block" strings are DLP action labels, never credentials.
     kind_actions: dict[str, str] = field(
-        default_factory=lambda: {"rrn": "block", "card": "block", "secret": "block"}
+        default_factory=lambda: {
+            "rrn": "block",
+            "card": "block",
+            "secret": _BLOCK_ACTION,
+        }
     )
     rule_actions: dict[str, str] = field(default_factory=dict)
     scan_request: bool = True

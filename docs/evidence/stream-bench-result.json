@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "measured_at": "2026-07-12T00:37:16.976645+00:00",
+  "environment": {
+    "python": "3.12.13",
+    "system": "Windows",
+    "machine": "AMD64",
+    "transport": "localhost HTTP/1.1 keep-alive"
+  },
+  "runs_per_mode": 100,
+  "warmup_runs_per_mode": 10,
+  "upstream_inter_event_delay_ms": 25,
+  "payload": "two complete clean synthetic SSE events",
+  "results": {
+    "direct": {
+      "ttfb_ms": {"mean":1.631,"p50":1.546,"p95":3.168,"min":0.881,"max":4.708},
+      "total_ms": {"mean":32.105,"p50":29.605,"p95":42.257,"min":27.016,"max":46.906}
+    },
+    "buffer": {
+      "ttfb_ms": {"mean":37.158,"p50":35.504,"p95":48.326,"min":29.559,"max":61.864},
+      "total_ms": {"mean":37.233,"p50":35.625,"p95":48.408,"min":29.608,"max":62.022}
+    },
+    "event": {
+      "ttfb_ms": {"mean":4.892,"p50":4.509,"p95":10.13,"min":2.521,"max":13.591},
+      "total_ms": {"mean":37.656,"p50":35.145,"p95":52.305,"min":28.982,"max":59.932}
+    }
+  },
+  "event_vs_buffer": {
+    "mean_ttfb_reduction_ms": 32.266,
+    "mean_ttfb_reduction_percent": 86.835,
+    "p95_ttfb_reduction_ms": 38.196
+  },
+  "scope_note": "Event mode releases each complete event after inspection; it does not provide token-fragment semantic reconstruction across events."
+}

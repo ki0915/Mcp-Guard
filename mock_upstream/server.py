@@ -61,7 +61,11 @@ async def stream(
     async def events() -> AsyncIterator[bytes]:
         started = time.perf_counter()
         yield b"event: message\ndata: synthetic first event\n\n"
-        await asyncio.sleep(delay_ms / 1000)
+        deadline = started + delay_ms / 1000
+        while (remaining := deadline - time.perf_counter()) > 0:
+            # Windows timers may wake a short sleep early. Re-checking the
+            # monotonic deadline keeps the benchmark's injected gap honest.
+            await asyncio.sleep(remaining)
         gap_ms = (time.perf_counter() - started) * 1000
         yield (
             f"event: message\ndata: synthetic second event; server_gap_ms={gap_ms:.3f}\n\n"

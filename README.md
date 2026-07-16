@@ -25,7 +25,7 @@ workspace에서 재실행한 결과다. 자세한 방법·환경·실패 케이�
 | SSE event TTFB | 평균 **37.158ms → 4.892ms (-86.835%)** | 25ms gap, 모드별 100 runs |
 | 전체 테스트 | **187 passed, 1 skipped** | 2026-07-16; skip은 Windows POSIX mode 전용 1건 |
 | fresh 배포 | Helm `deployed`, 2 pods `1/1 Running` | Docker 29.6.1, k3d 5.8.3 |
-| GitHub Actions 전체 CI/CD | **green**: test → GHCR push → k3d/Helm → curl smoke | [run #29484526417](https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417), `workflow_dispatch`, 2026-07-16 |
+| GitHub Actions 전체 CI/CD | **green**: test → GHCR push → k3d/Helm → curl smoke | [run #29485736882](https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882), `workflow_dispatch`, 2026-07-16 |
 
 이 수치는 저장소의 작은 합성 회귀셋과 로컬 환경에만 적용된다. “실서비스 탐지율
 93.3%” 또는 “오탐 없음”으로 일반화하면 안 된다.
@@ -322,7 +322,7 @@ helm lint --strict deploy/helm/dlp-proxy
 - 정책 설정 가이드: [`docs/POLICY_GUIDE.md`](docs/POLICY_GUIDE.md)
 - 합성 데이터 정책: [`tests/data/README.md`](tests/data/README.md)
 - CI/CD: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-- 전체 실증 실행: [GitHub Actions #29484526417](https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417) — GHCR 이미지 실제 푸시, k3d/Helm 설치, 합성 curl smoke 성공
+- 전체 실증 실행: [GitHub Actions #29485736882](https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882) — 187개 테스트, GHCR 이미지 실제 푸시, k3d/Helm 설치, 합성 curl smoke 성공
 - Helm chart: [`deploy/helm/dlp-proxy`](deploy/helm/dlp-proxy)
 
 방어 목적의 포트폴리오 프로젝트다. 현재 저장소에는 재사용 조건을 정하는 `LICENSE`가

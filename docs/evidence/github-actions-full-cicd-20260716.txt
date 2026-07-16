@@ -4,9 +4,9 @@ Mcp-Guard GitHub Actions full CI/CD evidence
 Date (KST): 2026-07-16
 Repository: ki0915/Mcp-Guard
 Branch: codex/confidential-policy-guardrails
-Commit: 33ca0efb3494c7c6518bd346477b8f2eff78c619
+Commit: 93e260a9fe41958f6331ee9dbc538a5897d2ffbb
 Event: workflow_dispatch
-Run: https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417
+Run: https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882
 
 Observed job results
 --------------------
@@ -14,7 +14,7 @@ Observed job results
 lint-test: success
   - package install
   - Ruff and Bandit
-  - 179 passed, 1 skipped
+  - 187 passed, 1 skipped
   - synthetic detection accuracy report
   - policy and Helm security-schema validation
 
@@ -22,8 +22,8 @@ build-push: success
   - GHCR login: success
   - proxy image build and push: success
   - mock-upstream image build and push: success
-  - ghcr.io/ki0915/mcp-guard/proxy:33ca0efb3494c7c6518bd346477b8f2eff78c619
-  - ghcr.io/ki0915/mcp-guard/mock-upstream:33ca0efb3494c7c6518bd346477b8f2eff78c619
+  - ghcr.io/ki0915/mcp-guard/proxy:93e260a9fe41958f6331ee9dbc538a5897d2ffbb
+  - ghcr.io/ki0915/mcp-guard/mock-upstream:93e260a9fe41958f6331ee9dbc538a5897d2ffbb
 
 deploy-k8s: success
   - fresh k3d cluster: success

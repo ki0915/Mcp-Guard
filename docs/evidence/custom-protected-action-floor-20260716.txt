@@ -37,6 +37,14 @@ Container build
   image ID: sha256:85a670176719f784b1d58ce9ffc507716ecfc45569198c917be056fd1eb54599
   result: PASS
 
+Remote verification
+  commit: 93e260a9fe41958f6331ee9dbc538a5897d2ffbb
+  PR CI: https://github.com/ki0915/Mcp-Guard/actions/runs/29485622328
+  full CI/CD: https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882
+  lint-test: success
+  GHCR proxy/mock image push: success
+  k3d + Helm + synthetic curl smoke: success
+
 Architecture render
   docs/assets/architecture.svg                            PASS
   docs/assets/architecture.png                            PASS (1600x1000)

@@ -24,7 +24,7 @@
 | 배포가 재현되는가? | fresh k3d + Helm, 2 pods Ready, 실제 redact/block | 통과 |
 | 코드 품질 gate가 통과하는가? | 187 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
 | 사용자 정의 기밀 rule이 `alert`로 원문을 전달할 수 있는가? | 기본 `confidential` 포함 보호 kind 6 cases와 Helm negative test에서 모두 거부 | 차단 확인 |
-| 원격 CI/CD가 끝까지 동작하는가? | [Actions #29484526417](https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417): test, GHCR push, k3d/Helm, curl smoke 모두 성공 | 통과 |
+| 원격 CI/CD가 끝까지 동작하는가? | [Actions #29485736882](https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882): 187 tests, GHCR push, k3d/Helm, curl smoke 모두 성공 | 통과 |
 
 원격 실행은 2026-07-16 `workflow_dispatch`로 PR 브랜치에서 수행했다. proxy와 mock-upstream
 이미지를 `ghcr.io/ki0915/mcp-guard/*`에 실제 푸시한 뒤 임시 k3d 클러스터에 배포했다.

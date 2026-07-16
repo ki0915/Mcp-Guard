@@ -1,0 +1,48 @@
+Mcp-Guard synthetic fixture admission-control evidence
+Date: 2026-07-16 KST
+Scope: repository-local synthetic detector fixtures only
+
+Command:
+  python scripts/verify_synthetic_fixtures.py
+
+Result:
+  Synthetic fixture guard: PASS (4 registered datasets)
+
+Registered corpus:
+  benign_cases.json       14 cases
+  evasion_benchmark.json  90 cases
+  pii_cases.json           27 cases
+  secret_cases.json        14 cases
+  Total                   145 cases
+
+Guarded properties:
+  - every tests/data JSON dataset is registered; unregistered JSON fails
+  - each entry declares synthetic_only=true and fabrication provenance
+  - exact bytes are bound to a reviewed SHA-256 digest and case count
+  - case IDs are non-empty and unique within each dataset
+  - sensitive cases carry a visible synthetic marker in text/note or decoded sample
+
+Negative regression tests:
+  - unreviewed byte change rejected
+  - unregistered JSON dataset rejected
+  - sensitive case without a synthetic marker rejected
+  - removed synthetic-only declaration rejected
+
+Full local regression:
+  192 passed, 1 skipped in 1.98s
+  Accuracy: positive 35/35 (100.0%), benign false positives 0/14 (0.0%)
+  Ruff, Bandit, actionlint, Helm strict lint: PASS
+  Docker image: ghcr.io/ki0915/mcp-guard/proxy:synthetic-fixture-guard
+  Image ID: sha256:c3b158ac3b11a0daa2c6040cfbeb2ed1f1c723b080eb74c7d4497388ab73b4d2
+
+Remote verification:
+  Commit: daa20a29bcdca4169b23feb861771ce44244818a
+  PR CI: https://github.com/ki0915/Mcp-Guard/actions/runs/29486791674 (success)
+  Full CI/CD: https://github.com/ki0915/Mcp-Guard/actions/runs/29486892909 (success)
+  Full path: 192 tests + fixture gate + GHCR push + fresh k3d/Helm + curl smoke
+
+Honest boundary:
+  This is a review and change-control gate. A marker, provenance declaration,
+  and digest do not mathematically prove that a submitted value never belonged
+  to a real person. Production logs, prompts, credentials, and customer records
+  remain prohibited and require human review.

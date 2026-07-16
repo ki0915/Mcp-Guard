@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "synthetic_only": true,
+  "purpose": "Review gate for fabricated detector fixtures; this is change control, not mathematical proof of provenance.",
+  "files": [
+    {
+      "path": "benign_cases.json",
+      "synthetic_only": true,
+      "case_count": 14,
+      "sha256": "b14d141683e9ed0c1f4721b92246b145dbe34ea87e8d7fd7d595c6b1e83830bf",
+      "provenance": "Author-written ordinary text plus reserved example domains, private IPs, and fabricated identifiers."
+    },
+    {
+      "path": "evasion_benchmark.json",
+      "synthetic_only": true,
+      "case_count": 90,
+      "sha256": "d8ceaa75ae850bfae9cacb2cd4b8f240f2186b2efe0272c608550f2b939a896a",
+      "provenance": "Deterministic transformations of visibly synthetic placeholders created for this benchmark."
+    },
+    {
+      "path": "pii_cases.json",
+      "synthetic_only": true,
+      "case_count": 27,
+      "sha256": "59d009648fdd2c7780c39022d670462131b83d3cb0dd8d00cca7c4a1eb7c6a76",
+      "provenance": "Fabricated zero-serial RRN checksum samples, zero-heavy phones/accounts, and payment-network test cards."
+    },
+    {
+      "path": "secret_cases.json",
+      "synthetic_only": true,
+      "case_count": 14,
+      "sha256": "9af4bce5338eb1a740d903a707598587df0af2945b9188b309a45b3ab284a6ea",
+      "provenance": "Nonfunctional vendor examples and author-generated credential-shaped entropy strings used only for detection tests."
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 # Mcp-Guard 실증 테스트 보고서
 
-> 측정일: 2026-07-12 KST · Python 3.12.13 · Windows 11 · Docker 29.6.1 · k3d 5.8.3
+> 성능·배포 측정일: 2026-07-12 KST · 레지스트리/전체 회귀 재검증: 2026-07-15 KST
+>
+> Python 3.12.13 · Windows 11 · Docker 29.6.1 · k3d 5.8.3
 
 이 보고서는 현재 구현을 **합성 데이터만으로** 재실행해 얻은 결과를 기록한다. 사용자,
 고객, 직원의 실제 개인정보와 운영 API key는 테스트·로그·이미지에 사용하지 않았다.
@@ -20,7 +22,17 @@
 | 실제 HTTP proxy 비용은 얼마인가? | 평균 +3.10ms, p95 +3.65ms | 200 paired runs |
 | SSE event 검사가 buffering TTFB를 줄이는가? | 평균 37.158ms → 4.892ms, **-86.835%** | 100 runs/mode |
 | 배포가 재현되는가? | fresh k3d + Helm, 2 pods Ready, 실제 redact/block | 통과 |
-| 코드 품질 gate가 통과하는가? | 165 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
+| 코드 품질 gate가 통과하는가? | 192 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
+| 실제 데이터의 fixture 혼입을 자동 통제하는가? | 4개 등록 데이터셋·145 cases의 digest/출처/표식 gate 통과 | 통과 |
+| 사용자 정의 기밀 rule이 `alert`로 원문을 전달할 수 있는가? | 기본 `confidential` 포함 보호 kind 6 cases와 Helm negative test에서 모두 거부 | 차단 확인 |
+| 원격 CI/CD가 끝까지 동작하는가? | [Actions #29486892909](https://github.com/ki0915/Mcp-Guard/actions/runs/29486892909): 192 tests, fixture gate, GHCR push, k3d/Helm, curl smoke 모두 성공 | 통과 |
+
+원격 실행은 2026-07-16 `workflow_dispatch`로 PR 브랜치에서 수행했다. proxy와 mock-upstream
+이미지를 `ghcr.io/ki0915/mcp-guard/*`에 실제 푸시한 뒤 임시 k3d 클러스터에 배포했다.
+PR 이벤트에서는 외부 패키지 변경을 막기 위해 이미지를 빌드만 하고 push/deploy는 생략한다.
+`main` push와 수동 실행은 동일한 release 경로를 사용한다.
+단계별 결과와 게시 이미지 SHA는
+[`github-actions-full-cicd-20260716.txt`](evidence/github-actions-full-cicd-20260716.txt)에 고정했다.
 
 ## 2. 정확도·오탐 실증
 
@@ -69,6 +81,22 @@ python scripts/accuracy_report.py
 
 전체 결과와 exact dataset SHA-256은
 [`improvement-report.json`](evidence/improvement-report.json)에 있다.
+
+### 2.3 합성 fixture 입장 통제
+
+명령: `python scripts/verify_synthetic_fixtures.py`
+
+| 검증 | 실측 결과 |
+|---|---:|
+| manifest 등록 | 4/4 JSON 데이터셋 |
+| 등록 case | 145건 |
+| SHA-256·case count·고유 ID·출처 선언 | 모두 통과 |
+| 민감 case 가시적 합성 표식 | 모두 통과 |
+| negative regression | 변조·미등록·무표식·선언 제거 4종 모두 거부 |
+
+이 검사는 고객 기록이나 운영 로그를 fixture에 실수로 복사하는 것을 어렵게 하는 review
+gate다. manifest를 함께 고치는 악의적/부주의한 제출까지 실제 데이터가 아니라고 증명하지는
+않는다. 합성값만 사용한다는 저장소 정책과 코드 리뷰가 함께 필요하다.
 
 ## 3. 성능 실증
 
@@ -122,13 +150,37 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 
 | 검증 | 결과 |
 |---|---|
-| `pytest -q` | **165 passed, 1 skipped** in 1.54s |
+| 전체 pytest | **192 passed, 1 skipped** in 1.98s (2026-07-16) |
+| 합성 fixture guard | **PASS**, 4 datasets / 145 cases |
 | skip 사유 | Windows에서 POSIX file-mode 전용 test 1건 |
 | `ruff check .` | 통과 |
 | Bandit (`dlp_proxy scripts mock_upstream`) | 통과 |
 | `actionlint` | 통과 |
 | `helm lint --strict` | 0 failed |
 | Docker proxy/mock build | 통과 |
+
+### 4.1 기밀 정책·Protected-value 레지스트리 안전장치
+
+2026-07-15 변경에서 전용 합성 테스트 14건을 추가했다.
+
+| 검증 대상 | 결과 |
+|---|---|
+| protected `alert` 설정 | production loader가 거부 |
+| protected `redact` 설정 | 허용 후 실제 action 확인 |
+| safe inventory | literal·digest 비출력 확인 |
+| ID 기반 remove | exact 1건 제거, 실패 시 원본 보존 |
+| hidden probe 결과 | 원문·rule ID 없이 block metadata만 반환 |
+| scan off / oversize probe | 실제 policy control과 동일 판정 |
+| `rrn`/`card`/`secret` kind 3종 `alert` | loader와 Helm schema가 거부 |
+| 고신뢰 rule override 3종 `alert` | loader가 거부 |
+| 알 수 없는 rule override | 오타 가능성으로 시작 전 거부 |
+| policy posture | hardened/degraded와 fail-open 목록 확인 |
+
+설치된 `dlp-protected-values list`도 합성 registry에 실행해 ID·action·scope metadata는
+표시하면서 literal과 SHA-256 prefix가 출력되지 않음을 확인했다. 이는 비밀값 자체의
+안전성을 증명하는 보편적 수치가 아니라, 명시된 14개 관리 불변식의 회귀 결과다.
+명령과 비민감 결과는
+[`registry-guardrails-20260715.txt`](evidence/registry-guardrails-20260715.txt)에 고정했다.
 
 ## 5. fresh k3d / Helm 실증
 
@@ -157,8 +209,10 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 
 다음 문장은 측정 범위를 함께 유지할 때만 사용한다.
 
-- “Python 기반 MCP/LLM outbound DLP를 설계하고 165개 자동화 테스트와 fresh k3d/Helm
+- “Python 기반 MCP/LLM outbound DLP를 설계하고 192개 자동화 테스트와 fresh k3d/Helm
   smoke test로 request/response redact·block·audit 불변식을 검증했다.”
+- “합성 detector fixture 145건을 4개 SHA-256 manifest로 고정하고 출처·가시적 표식·미등록
+  파일을 검사하는 CI 입장 통제와 4종 negative regression을 구현했다.”
 - “90건 합성 evasion regression corpus에서 raw-only 대비 case recall을 16.7%에서
   93.3%로 +76.7%p 개선했고, 고정 benign 30건의 오탐은 0건을 유지했다.”
 - “NFKC·digit compaction·1-pass Base64·contextual rule의 추가 scan 비용을 p95
@@ -179,11 +233,13 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 - stdio adapter는 newline-delimited JSON-RPC MCP만 지원한다.
 - response block은 upstream에 이미 보낸 request를 회수하지 못한다.
 - 앱이 프록시를 우회하면 검사하지 못한다. egress 강제와 RBAC가 별도로 필요하다.
+- 합성 fixture manifest는 변경 통제이지 실제 세계의 데이터 출처를 증명하는 장치는 아니다.
 
 ## 8. 재현 명령
 
 ```bash
 python scripts/accuracy_report.py
+python scripts/verify_synthetic_fixtures.py
 python scripts/improvement_report.py --rounds 200
 python bench/bench.py 200
 python bench/stream_bench.py 100

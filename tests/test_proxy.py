@@ -42,9 +42,15 @@ class SyntheticSSEStream(httpx.AsyncByteStream):
         self.closed = True
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.fixture(scope="module", autouse=True)
+async def _keep_module_anyio_runner(anyio_backend: str):
+    """Reuse one loop to avoid intermittent Windows socketpair exhaustion."""
+    yield
 
 
 def make_policy(**overrides) -> Policy:
@@ -603,6 +609,8 @@ async def test_protected_value_blocks_and_status_never_exposes_it(tmp_path: Path
         assert status.status_code == 200
         assert status.headers["cache-control"] == "no-store"
         assert status.json()["protected_values"] == 1
+        assert status.json()["posture"] == "hardened"
+        assert status.json()["fail_open_controls"] == []
         assert protected_value not in status.text
         assert "project-code" not in status.text
 

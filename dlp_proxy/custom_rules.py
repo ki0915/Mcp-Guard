@@ -31,6 +31,8 @@ MAX_CONTEXT_LITERALS_PER_GROUP = 8
 MIN_CONTEXT_WINDOW_CHARS = 16
 MAX_CONTEXT_WINDOW_CHARS = 1024
 MAX_CONTEXT_LITERAL_CHARS = 128
+PROTECTED_ACTIONS = frozenset({"block", "redact"})
+PROTECTED_KINDS = frozenset({"rrn", "card", "secret", "confidential", "policy_error"})
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 _KIND_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -94,6 +96,10 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
         if not isinstance(kind, str) or not _KIND_RE.fullmatch(kind):
             raise ValueError(f"{label}.kind is invalid")
         action = _action(item.get("action"), valid_actions, label)
+        if kind in PROTECTED_KINDS and action not in PROTECTED_ACTIONS:
+            raise ValueError(
+                f"{label}.action must be block or redact for protected kind {kind}"
+            )
         scope = _scope(item.get("scope"), label, require_narrow=False)
         matcher_raw = _mapping(item.get("matcher"), f"{label}.matcher")
         match_type = matcher_raw.get("type")
@@ -186,7 +192,12 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
 def compile_protected_values(
     raw: object, valid_actions: frozenset[str]
 ) -> tuple[CompiledRule, ...]:
-    """Compile exact literals or bounded SHA-256 token fingerprints."""
+    """Compile exact literals or bounded SHA-256 token fingerprints.
+
+    Protected values may never use ``alert`` because that action forwards the
+    original value unchanged.  Keep this invariant here (rather than only in
+    the CLI) so every loader and programmatic caller receives the same guard.
+    """
     items = _list(raw, "protected_values")
     if len(items) > MAX_PROTECTED_VALUES:
         raise ValueError(f"protected_values exceeds limit {MAX_PROTECTED_VALUES}")
@@ -202,7 +213,7 @@ def compile_protected_values(
             label,
         )
         rule_id = _rule_id(item.get("id"), label, seen)
-        action = _action(item.get("action"), valid_actions, label)
+        action = _action(item.get("action"), valid_actions & PROTECTED_ACTIONS, label)
         scope = _scope(item.get("scope"), label, require_narrow=False)
         literal = item.get("literal")
         digest = item.get("sha256")

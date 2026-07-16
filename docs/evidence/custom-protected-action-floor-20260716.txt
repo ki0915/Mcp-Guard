@@ -1,0 +1,54 @@
+Mcp-Guard custom protected-kind action-floor evidence
+======================================================
+
+Date (KST): 2026-07-16
+Data policy: synthetic values only
+
+Security invariant
+------------------
+
+User-defined rules with kind rrn, card, secret, confidential, or policy_error
+must use block or redact. Omitting kind defaults to confidential and therefore
+must also reject alert. Non-sensitive custom kinds may still use alert.
+
+Measured checks
+---------------
+
+Targeted Python policy tests
+  60 passed, 1 skipped in 0.34s
+
+Full Python regression
+  187 passed, 1 skipped in 1.88s
+
+Static/security checks
+  Ruff                                                    PASS
+  Bandit                                                  PASS
+  actionlint                                              PASS
+  helm lint --strict                                      PASS
+
+Helm negative test
+  custom_rules[0].kind=confidential
+  custom_rules[0].action=alert
+  result: REJECTED
+  schema: action value must be one of redact, block
+
+Container build
+  tag: ghcr.io/ki0915/mcp-guard/proxy:custom-action-floor
+  image ID: sha256:85a670176719f784b1d58ce9ffc507716ecfc45569198c917be056fd1eb54599
+  result: PASS
+
+Remote verification
+  commit: 93e260a9fe41958f6331ee9dbc538a5897d2ffbb
+  PR CI: https://github.com/ki0915/Mcp-Guard/actions/runs/29485622328
+  full CI/CD: https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882
+  lint-test: success
+  GHCR proxy/mock image push: success
+  k3d + Helm + synthetic curl smoke: success
+
+Architecture render
+  docs/assets/architecture.svg                            PASS
+  docs/assets/architecture.png                            PASS (1600x1000)
+
+This evidence proves the listed configuration invariant and regression checks.
+It does not prove prevention of semantic, encrypted, split-message, or
+out-of-path exfiltration.

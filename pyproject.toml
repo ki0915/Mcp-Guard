@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 dlp-stdio-proxy = "dlp_proxy.stdio_proxy:main"
+dlp-protected-values = "dlp_proxy.registry_cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -34,3 +35,4 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

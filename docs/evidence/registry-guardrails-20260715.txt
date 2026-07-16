@@ -1,0 +1,77 @@
+Mcp-Guard protected-value registry guardrail evidence
+Measured: 2026-07-15 KST
+Environment: Python 3.12.13, Windows 11 workspace
+Data policy: conspicuously synthetic fixtures only. No user/customer/employee
+PII, production secret, or live credential was used.
+
+1. Full regression
+
+Command:
+  python -m pytest -q -p no:cacheprovider
+
+Result:
+  179 passed, 1 skipped in 2.20s
+
+The single skip is the POSIX-only protected-file-mode test on Windows. The
+cache provider was disabled because this managed workspace account cannot
+write the pre-existing .pytest_cache owned by another local account; this does
+not disable test collection or application behavior.
+
+2. Dedicated registry/policy regression
+
+Command:
+  python -m pytest -q tests/test_protected_values_cli.py \
+    tests/test_custom_policy.py tests/test_policy.py
+
+Result:
+  61 passed, 1 skipped in 0.55s
+
+Fourteen cases added in this change prove:
+  - protected action=alert is rejected;
+  - protected action=redact remains supported;
+  - safe inventory omits literal and digest material;
+  - exact ID removal is validated and atomic;
+  - probe output omits raw input and rule ID;
+  - probe respects disabled scan and oversize controls.
+  - rrn/card/secret kind-level alert is rejected (3 cases);
+  - high-confidence RRN/card/secret rule-level alert is rejected (3 cases);
+  - an unknown rule override is rejected as a probable typo;
+  - safe_summary reports hardened/degraded posture and fail-open controls.
+
+3. Installed CLI and non-disclosure check
+
+Commands:
+  pip install -e . --no-deps
+  dlp-protected-values list \
+    --file configs/protected-values.example.yaml
+
+Observed safe output fields:
+  summary, protected_values, allowlist, id, action, match_type, directions,
+  method_count, path_prefix_count
+
+Assertions:
+  protected literal present in output: false
+  SHA-256 prefix present in output: false
+  protected item count: 2
+
+4. Static/configuration gates
+
+  ruff check .                                      PASS
+  bandit -q -r dlp_proxy scripts mock_upstream     PASS
+  actionlint                                        PASS
+  helm lint --strict deploy/helm/dlp-proxy          PASS (0 failed)
+  Markdown relative-link validation                 PASS
+  architecture.svg XML parse                        PASS
+
+5. Current container packaging
+
+  docker build -t dlp-proxy:policy-guardrails-20260715 .   PASS
+  installed dlp-protected-values list in container         PASS
+  protected literal in container CLI output                false
+  SHA-256 prefix in container CLI output                    false
+  policy posture in container CLI output                    hardened
+  local image ID                                             sha256:8f602e96a8f07794f0a65255b7b819633259c00f7f89e5a5d9f9806d1c0e99e1
+
+These results are regression evidence for the listed implementation
+invariants. They are not a claim of complete prevention against semantic,
+encoded, encrypted, split-message, or proxy-bypass exfiltration.

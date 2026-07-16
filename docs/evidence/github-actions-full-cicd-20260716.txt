@@ -1,0 +1,42 @@
+Mcp-Guard GitHub Actions full CI/CD evidence
+=============================================
+
+Date (KST): 2026-07-16
+Repository: ki0915/Mcp-Guard
+Branch: codex/confidential-policy-guardrails
+Commit: 33ca0efb3494c7c6518bd346477b8f2eff78c619
+Event: workflow_dispatch
+Run: https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417
+
+Observed job results
+--------------------
+
+lint-test: success
+  - package install
+  - Ruff and Bandit
+  - 179 passed, 1 skipped
+  - synthetic detection accuracy report
+  - policy and Helm security-schema validation
+
+build-push: success
+  - GHCR login: success
+  - proxy image build and push: success
+  - mock-upstream image build and push: success
+  - ghcr.io/ki0915/mcp-guard/proxy:33ca0efb3494c7c6518bd346477b8f2eff78c619
+  - ghcr.io/ki0915/mcp-guard/mock-upstream:33ca0efb3494c7c6518bd346477b8f2eff78c619
+
+deploy-k8s: success
+  - fresh k3d cluster: success
+  - pushed images pulled and imported: success
+  - synthetic protected-values Secret created: success
+  - helm install --wait: success
+  - clean request forwarding: success
+  - synthetic phone redaction: success
+  - synthetic RRN block without upstream forwarding: success
+  - synthetic protected literal and SHA-256 token blocks: success
+  - audit log secret-leak assertions: success
+  - k8s-smoke-evidence artifact upload: success
+
+This evidence uses only repository-owned synthetic values. It is not evidence
+that the proxy prevents semantic, encrypted, arbitrarily encoded, split-message,
+or out-of-path exfiltration.

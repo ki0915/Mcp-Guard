@@ -23,6 +23,14 @@
 | SSE event 검사가 buffering TTFB를 줄이는가? | 평균 37.158ms → 4.892ms, **-86.835%** | 100 runs/mode |
 | 배포가 재현되는가? | fresh k3d + Helm, 2 pods Ready, 실제 redact/block | 통과 |
 | 코드 품질 gate가 통과하는가? | 179 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
+| 원격 CI/CD가 끝까지 동작하는가? | [Actions #29484526417](https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417): test, GHCR push, k3d/Helm, curl smoke 모두 성공 | 통과 |
+
+원격 실행은 2026-07-16 `workflow_dispatch`로 PR 브랜치에서 수행했다. proxy와 mock-upstream
+이미지를 `ghcr.io/ki0915/mcp-guard/*`에 실제 푸시한 뒤 임시 k3d 클러스터에 배포했다.
+PR 이벤트에서는 외부 패키지 변경을 막기 위해 이미지를 빌드만 하고 push/deploy는 생략한다.
+`main` push와 수동 실행은 동일한 release 경로를 사용한다.
+단계별 결과와 게시 이미지 SHA는
+[`github-actions-full-cicd-20260716.txt`](evidence/github-actions-full-cicd-20260716.txt)에 고정했다.
 
 ## 2. 정확도·오탐 실증
 

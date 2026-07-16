@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from .custom_rules import (
+    PROTECTED_KINDS,
     CompiledRule,
     Scope,
     compile_custom_rules,
@@ -33,7 +34,6 @@ CONTROL_ACTIONS = frozenset({"block", "alert"})
 NON_FORWARDING_ACTIONS = frozenset({"redact", "block"})
 _BLOCK_ACTION = "block"
 SSE_MODES = frozenset({"buffer", "event"})
-PROTECTED_KINDS = frozenset({"rrn", "card", "secret", "confidential", "policy_error"})
 MAX_BODY_BYTES = 16 * 1024 * 1024
 MAX_ALLOWLIST_ENTRIES = 128
 MAX_ALLOWLIST_TTL = timedelta(days=30)
@@ -210,6 +210,11 @@ class Policy:
                     and _BUILTIN_RULE_KINDS.get(rule) in _SENSITIVE_KIND_ACTIONS
                     and rule not in _LOW_CONFIDENCE_FORWARDING_RULES
                     for rule, action in self.rule_actions.items()
+                ),
+                "custom_protected_kind_forwarding": any(
+                    rule.kind in PROTECTED_KINDS
+                    and rule.action not in NON_FORWARDING_ACTIONS
+                    for rule in self.custom_rules
                 ),
             }.items()
             if enabled

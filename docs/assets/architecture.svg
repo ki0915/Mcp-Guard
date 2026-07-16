@@ -88,8 +88,8 @@
   <rect x="845" y="470" rx="9" width="74" height="38" fill="#164f48" stroke="#50e3a4"/><text x="860" y="495" class="body">redact</text>
   <rect x="930" y="470" rx="9" width="72" height="38" fill="#582e35" stroke="#ff7f7f"/><text x="949" y="495" class="body">block</text>
   <rect x="1013" y="470" rx="9" width="76" height="38" fill="#55461e" stroke="#ffd166"/><text x="1031" y="495" class="body">alert</text>
-  <text x="845" y="538" class="body">Action floors · Scoped allowlist</text>
-  <text x="845" y="560" class="small">Fail-closed controls · hardened/degraded posture</text>
+  <text x="845" y="538" class="body">Built-in + custom action floors</text>
+  <text x="845" y="560" class="small">Scoped allowlist · fail-closed posture</text>
 
   <path d="M775 490 H805" class="flow"/>
 
@@ -122,7 +122,7 @@
   <!-- Config and deployment -->
   <rect x="190" y="855" rx="18" width="260" height="95" fill="#113a37" stroke="#3aa78f" stroke-width="2" filter="url(#shadow)"/>
   <text x="220" y="891" class="sh">ConfigMap · Policy</text>
-  <text x="220" y="920" class="small">rules · limits · action · SSE mode</text>
+  <text x="220" y="920" class="small">rules · protected-kind floor · SSE mode</text>
 
   <rect x="520" y="855" rx="18" width="280" height="95" fill="#392d3f" stroke="#a978c8" stroke-width="2" filter="url(#shadow)"/>
   <text x="550" y="891" class="sh">Kubernetes Secret</text>

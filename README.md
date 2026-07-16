@@ -23,7 +23,7 @@ workspace에서 재실행한 결과다. 자세한 방법·환경·실패 케이�
 | enhanced scan 비용 | 평균 **+0.0440ms**, p95 **+0.0774ms** | 모드별 18,000 samples |
 | HTTP proxy overhead | 평균 **+3.10ms**, p95 **+3.65ms** | 1,102B, 200 paired localhost runs |
 | SSE event TTFB | 평균 **37.158ms → 4.892ms (-86.835%)** | 25ms gap, 모드별 100 runs |
-| 전체 테스트 | **179 passed, 1 skipped** | 2026-07-15; skip은 Windows POSIX mode 전용 1건 |
+| 전체 테스트 | **187 passed, 1 skipped** | 2026-07-16; skip은 Windows POSIX mode 전용 1건 |
 | fresh 배포 | Helm `deployed`, 2 pods `1/1 Running` | Docker 29.6.1, k3d 5.8.3 |
 | GitHub Actions 전체 CI/CD | **green**: test → GHCR push → k3d/Helm → curl smoke | [run #29484526417](https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417), `workflow_dispatch`, 2026-07-16 |
 
@@ -188,7 +188,10 @@ TTFB를 줄이지만 event 경계를 넘는 분할 의미는 재조립하지 않
 
 고신뢰 내장 kind(`rrn`, `card`, `secret`)와 해당 rule override는 `alert`로 낮출 수 없다.
 원문 전달을 막는 `block` 또는 `redact`만 허용하며, 오타 난 override 이름도 시작 시
-거부한다. `/policy/status`의 `posture`와 `fail_open_controls`는 request/response scan off,
+거부한다. 사용자 정의 rule도 kind가 `rrn`, `card`, `secret`, `confidential`,
+`policy_error`이면 같은 action floor를 적용한다. kind를 생략하면 기본값이
+`confidential`이므로 `alert`는 거부된다. `/policy/status`의 `posture`와
+`fail_open_controls`는 request/response scan off,
 oversize/unscannable alert 같은 명시적 fail-open 상태를 비밀값 없이 보여준다.
 
 ### 사용자 정의 정보
@@ -260,7 +263,7 @@ dlp-protected-values remove --file /secure/protected-values.yaml \
 - 모든 finding에 `rid`, 방향, kind, rule, action을 JSON Lines로 기록
 - raw match 대신 항상 `sample="***"`; transform source만 비민감 metadata로 기록
 - 보호값은 `alert` 금지; 숨김 등록·safe list·hidden probe·검증된 원자적 삭제
-- RRN·카드·시크릿 kind/rule은 non-forwarding action floor 강제, override 오타 거부
+- RRN·카드·시크릿 및 사용자 정의 보호 kind는 non-forwarding action floor 강제
 - `/policy/status`에서 `hardened`/`degraded`와 fail-open control 목록 제공
 - CLI가 repository 내부 보호값 파일 생성을 기본 거부하고 production loader로 선검증
 - body 최대 16MiB hard cap, query 16KiB/128 fields, finding 256개 상한
@@ -292,6 +295,7 @@ helm lint --strict deploy/helm/dlp-proxy
 | fresh k3d/Helm smoke | [`k8s-deploy-proof-20260712.txt`](docs/evidence/k8s-deploy-proof-20260712.txt) |
 | 기밀 정책·레지스트리 14개 안전장치 | [`registry-guardrails-20260715.txt`](docs/evidence/registry-guardrails-20260715.txt) |
 | GitHub Actions 전체 CI/CD | [`github-actions-full-cicd-20260716.txt`](docs/evidence/github-actions-full-cicd-20260716.txt) |
+| 사용자 정의 보호 kind action floor | [`custom-protected-action-floor-20260716.txt`](docs/evidence/custom-protected-action-floor-20260716.txt) |
 | 기술·보안 계약 | [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) |
 
 ## 이 도구가 막지 못하는 것

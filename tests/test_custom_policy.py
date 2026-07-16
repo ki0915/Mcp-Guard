@@ -20,6 +20,8 @@ from dlp_proxy.custom_rules import (
     MAX_CONTEXT_WINDOW_CHARS,
     MIN_CONTEXT_GROUPS,
     MIN_CONTEXT_WINDOW_CHARS,
+    CompiledRule,
+    Scope,
     compile_custom_rules,
     scan_rules,
 )
@@ -124,6 +126,56 @@ def test_custom_literal_and_regex_are_scoped(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "kind",
+    [None, "confidential", "rrn", "card", "secret", "policy_error"],
+)
+def test_custom_protected_kind_cannot_forward_raw_text(kind: str | None) -> None:
+    rule = {
+        "id": "unsafe-forwarding-rule",
+        "action": "alert",
+        "matcher": {"type": "literal", "values": ["SYNTHETIC-CLASSIFIER"]},
+    }
+    if kind is not None:
+        rule["kind"] = kind
+
+    with pytest.raises(ValueError, match="must be block or redact for protected kind"):
+        compile_custom_rules([rule], policy.VALID_ACTIONS)
+
+
+def test_custom_non_sensitive_kind_may_alert() -> None:
+    rules = compile_custom_rules(
+        [
+            {
+                "id": "document-label",
+                "kind": "classification_label",
+                "action": "alert",
+                "matcher": {"type": "literal", "values": ["INTERNAL ONLY"]},
+            }
+        ],
+        policy.VALID_ACTIONS,
+    )
+
+    assert rules[0].action == "alert"
+    assert rules[0].kind == "classification_label"
+
+
+def test_summary_reports_programmatic_custom_protected_forwarding() -> None:
+    unsafe = CompiledRule(
+        id="unsafe-programmatic",
+        rule="custom:unsafe-programmatic",
+        kind="confidential",
+        action="alert",
+        scope=Scope(frozenset({"request"})),
+        match_type="literal",
+    )
+
+    summary = policy.Policy(custom_rules=(unsafe,)).safe_summary()
+
+    assert summary["posture"] == "degraded"
+    assert summary["fail_open_controls"] == ["custom_protected_kind_forwarding"]
+
+
 def test_contextual_matcher_requires_every_literal_group_within_window(
     tmp_path: Path,
 ) -> None:
@@ -190,9 +242,10 @@ def test_contextual_matcher_requires_every_literal_group_within_window(
 def test_contextual_matcher_escapes_regex_metacharacters() -> None:
     rules = compile_custom_rules(
         [
-            {
-                "id": "escaped-context",
-                "action": "alert",
+                {
+                    "id": "escaped-context",
+                    "kind": "test_classifier",
+                    "action": "alert",
                 "matcher": {
                     "type": "contextual",
                     "groups": [["SYNTH.*ALPHA"], ["SYNTH[LOCKED]"]],
@@ -324,9 +377,10 @@ def test_contextual_matcher_rejects_unsafe_bounds(matcher: dict, match: str) -> 
 def test_contextual_match_flood_fails_closed_with_one_policy_error() -> None:
     rules = compile_custom_rules(
         [
-            {
-                "id": "bounded-context",
-                "action": "alert",
+                {
+                    "id": "bounded-context",
+                    "kind": "test_classifier",
+                    "action": "alert",
                 "matcher": {
                     "type": "contextual",
                     "groups": [["SYNTH-GROUP-A"], ["SYNTH-GROUP-B"]],
@@ -526,6 +580,7 @@ def test_zero_width_and_timeout_rules_fail_closed() -> None:
         [
             {
                 "id": "bounded",
+                "kind": "test_classifier",
                 "action": "alert",
                 "matcher": {"type": "regex", "pattern": "^(a+)+$"},
             }

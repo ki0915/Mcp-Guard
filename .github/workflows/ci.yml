@@ -72,6 +72,16 @@ jobs:
             exit 1
           fi
           if helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set 'policy.custom_rules[0].id=unsafe-custom-alert' \
+            --set 'policy.custom_rules[0].kind=confidential' \
+            --set 'policy.custom_rules[0].action=alert' \
+            --set 'policy.custom_rules[0].matcher.type=literal' \
+            --set 'policy.custom_rules[0].matcher.values[0]=SYNTHETIC-CLASSIFIER' \
+            >/tmp/forwarding-custom-confidential.txt 2>&1; then
+            echo 'values.schema.json accepted forwarding custom confidential action' >&2
+            exit 1
+          fi
+          if helm template dlp-proxy deploy/helm/dlp-proxy \
             --set resources.requests.cup=100m >/tmp/bad-resources.txt 2>&1; then
             echo 'values.schema.json accepted a misspelled resource key' >&2
             exit 1

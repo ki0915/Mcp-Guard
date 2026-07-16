@@ -94,6 +94,7 @@ flowchart LR
 | FR-013 | 관리 CLI는 숨김 등록·숨김 probe·비밀 없는 목록·검증된 원자적 삭제를 제공해야 한다. |
 | FR-014 | 고신뢰 `rrn`·`card`·`secret` kind/rule은 `alert`로 downgrade할 수 없고 알려지지 않은 override 이름은 거부해야 한다. |
 | FR-015 | `/policy/status`는 비밀 없는 `hardened`/`degraded` posture와 fail-open control 목록을 제공해야 한다. |
+| FR-016 | 사용자 정의 rule의 보호 kind(`rrn`, `card`, `secret`, `confidential`, `policy_error`)는 `block`/`redact`만 허용하고 kind 생략 시 `confidential`로 취급해야 한다. |
 
 ## 4. 탐지 계약
 
@@ -224,6 +225,7 @@ allowlist는 보호 kind가 아닌 오탐을 좁고 일시적으로 예외 처�
 6. 모든 겹침을 평가한 뒤 하나라도 `block`이면 redact보다 먼저 전체를 차단한다.
 7. `rrn`, `card`, `secret` kind와 고신뢰 built-in rule은 `block`/`redact`만 허용한다.
 8. 저신뢰 `rrn-format-only`만 명시적 `alert` override를 허용한다.
+9. custom rule의 보호 kind는 `block`/`redact`만 허용하며 policy loader와 Helm schema가 모두 검증한다.
 
 ### 5.2 policy YAML
 
@@ -378,7 +380,7 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 | 기준 | 검증 명령/증빙 | 현재 기준값 |
 |---|---|---|
 | 내장 탐지 회귀 | `python scripts/accuracy_report.py` | 케이스 단위 양성 35/35, 오탐 0/14(합성 fixture 한정) |
-| 회귀 테스트 | `pytest -q` | 179 passed, 1 POSIX-mode skip (2026-07-15) |
+| 회귀 테스트 | `pytest -q` | 187 passed, 1 POSIX-mode skip (2026-07-16) |
 | 배포 재현 | [`docs/evidence/k8s-deploy-proof.txt`](evidence/k8s-deploy-proof.txt) | fresh Helm install, Ready, 실제 redact/block |
 | 성능 | `python bench/bench.py 200` | paired 평균 +3.10ms, p95 +3.65ms |
 | 정적/패키지 | Ruff, Bandit, actionlint, Helm strict lint, Docker build | 모두 통과 필요 |

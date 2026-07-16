@@ -223,6 +223,28 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "action", "matcher"],
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {"not": {"required": ["kind"]}},
+              {
+                "required": ["kind"],
+                "properties": {
+                  "kind": {
+                    "enum": ["rrn", "card", "secret", "confidential", "policy_error"]
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "action": {"$ref": "#/definitions/nonForwardingAction"}
+            }
+          }
+        }
+      ],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"},
         "description": {"type": "string", "maxLength": 200},

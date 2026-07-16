@@ -32,6 +32,7 @@ MIN_CONTEXT_WINDOW_CHARS = 16
 MAX_CONTEXT_WINDOW_CHARS = 1024
 MAX_CONTEXT_LITERAL_CHARS = 128
 PROTECTED_ACTIONS = frozenset({"block", "redact"})
+PROTECTED_KINDS = frozenset({"rrn", "card", "secret", "confidential", "policy_error"})
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 _KIND_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -95,6 +96,10 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
         if not isinstance(kind, str) or not _KIND_RE.fullmatch(kind):
             raise ValueError(f"{label}.kind is invalid")
         action = _action(item.get("action"), valid_actions, label)
+        if kind in PROTECTED_KINDS and action not in PROTECTED_ACTIONS:
+            raise ValueError(
+                f"{label}.action must be block or redact for protected kind {kind}"
+            )
         scope = _scope(item.get("scope"), label, require_narrow=False)
         matcher_raw = _mapping(item.get("matcher"), f"{label}.matcher")
         match_type = matcher_raw.get("type")

@@ -33,6 +33,11 @@ Protected value에는 `alert`를 사용할 수 없다. `alert`는 원문을 그�
 override에도 적용된다. 이들은 `block` 또는 `redact`만 허용한다. 단, checksum을 적용할 수
 없는 저신뢰 `rrn-format-only`는 오탐 조정을 위해 명시적 `alert` override를 허용한다.
 
+사용자 정의 rule의 kind가 `rrn`, `card`, `secret`, `confidential`, `policy_error`이면
+동일하게 `alert`를 사용할 수 없다. kind를 생략한 custom rule은 기본값이
+`confidential`이므로 반드시 `block` 또는 `redact`를 선택해야 한다. 비민감 분류어를
+관찰하려는 경우에만 별도의 비보호 kind(예: `document_label`)와 `alert`를 사용한다.
+
 ## 3. 비민감 형식 규칙
 
 ### 3.1 Regex: 사번 형식

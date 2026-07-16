@@ -22,7 +22,8 @@
 | 실제 HTTP proxy 비용은 얼마인가? | 평균 +3.10ms, p95 +3.65ms | 200 paired runs |
 | SSE event 검사가 buffering TTFB를 줄이는가? | 평균 37.158ms → 4.892ms, **-86.835%** | 100 runs/mode |
 | 배포가 재현되는가? | fresh k3d + Helm, 2 pods Ready, 실제 redact/block | 통과 |
-| 코드 품질 gate가 통과하는가? | 179 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
+| 코드 품질 gate가 통과하는가? | 187 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
+| 사용자 정의 기밀 rule이 `alert`로 원문을 전달할 수 있는가? | 기본 `confidential` 포함 보호 kind 6 cases와 Helm negative test에서 모두 거부 | 차단 확인 |
 | 원격 CI/CD가 끝까지 동작하는가? | [Actions #29484526417](https://github.com/ki0915/Mcp-Guard/actions/runs/29484526417): test, GHCR push, k3d/Helm, curl smoke 모두 성공 | 통과 |
 
 원격 실행은 2026-07-16 `workflow_dispatch`로 PR 브랜치에서 수행했다. proxy와 mock-upstream
@@ -132,7 +133,7 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 
 | 검증 | 결과 |
 |---|---|
-| 전체 pytest | **179 passed, 1 skipped** in 2.20s (2026-07-15) |
+| 전체 pytest | **187 passed, 1 skipped** in 1.88s (2026-07-16) |
 | skip 사유 | Windows에서 POSIX file-mode 전용 test 1건 |
 | `ruff check .` | 통과 |
 | Bandit (`dlp_proxy scripts mock_upstream`) | 통과 |
@@ -190,7 +191,7 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 
 다음 문장은 측정 범위를 함께 유지할 때만 사용한다.
 
-- “Python 기반 MCP/LLM outbound DLP를 설계하고 179개 자동화 테스트와 fresh k3d/Helm
+- “Python 기반 MCP/LLM outbound DLP를 설계하고 187개 자동화 테스트와 fresh k3d/Helm
   smoke test로 request/response redact·block·audit 불변식을 검증했다.”
 - “90건 합성 evasion regression corpus에서 raw-only 대비 case recall을 16.7%에서
   93.3%로 +76.7%p 개선했고, 고정 benign 30건의 오탐은 0건을 유지했다.”

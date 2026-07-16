@@ -18,12 +18,13 @@ workspace에서 재실행한 결과다. 자세한 방법·환경·실패 케이�
 | 지표 | 실측값 | 범위 |
 |---|---:|---|
 | 내장 탐지 회귀 | 양성 **35/35**, 정상 오탐 **0/14** | 합성 한국 PII·시크릿 fixture |
+| 합성 fixture 입장 통제 | **4/4 데이터셋, 145 cases 통과** | SHA-256·출처·표식·미등록 파일 gate |
 | 우회 코퍼스 recall | **16.667% → 93.333% (+76.666%p)** | sensitive 60건, raw-only 대비 enhanced |
 | 우회 코퍼스 FPR | **0/30 → 0/30** | 고정 benign 30건 |
 | enhanced scan 비용 | 평균 **+0.0440ms**, p95 **+0.0774ms** | 모드별 18,000 samples |
 | HTTP proxy overhead | 평균 **+3.10ms**, p95 **+3.65ms** | 1,102B, 200 paired localhost runs |
 | SSE event TTFB | 평균 **37.158ms → 4.892ms (-86.835%)** | 25ms gap, 모드별 100 runs |
-| 전체 테스트 | **187 passed, 1 skipped** | 2026-07-16; skip은 Windows POSIX mode 전용 1건 |
+| 전체 테스트 | **192 passed, 1 skipped** | 2026-07-16; skip은 Windows POSIX mode 전용 1건 |
 | fresh 배포 | Helm `deployed`, 2 pods `1/1 Running` | Docker 29.6.1, k3d 5.8.3 |
 | GitHub Actions 전체 CI/CD | **green**: test → GHCR push → k3d/Helm → curl smoke | [run #29485736882](https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882), `workflow_dispatch`, 2026-07-16 |
 
@@ -277,6 +278,7 @@ dlp-protected-values remove --file /secure/protected-values.yaml \
 
 ```bash
 python scripts/accuracy_report.py
+python scripts/verify_synthetic_fixtures.py
 python scripts/improvement_report.py --rounds 200
 python bench/bench.py 200
 python bench/stream_bench.py 100
@@ -296,6 +298,7 @@ helm lint --strict deploy/helm/dlp-proxy
 | 기밀 정책·레지스트리 14개 안전장치 | [`registry-guardrails-20260715.txt`](docs/evidence/registry-guardrails-20260715.txt) |
 | GitHub Actions 전체 CI/CD | [`github-actions-full-cicd-20260716.txt`](docs/evidence/github-actions-full-cicd-20260716.txt) |
 | 사용자 정의 보호 kind action floor | [`custom-protected-action-floor-20260716.txt`](docs/evidence/custom-protected-action-floor-20260716.txt) |
+| 합성 fixture 입장 통제 | [`synthetic-fixture-guard-20260716.txt`](docs/evidence/synthetic-fixture-guard-20260716.txt) |
 | 기술·보안 계약 | [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) |
 
 ## 이 도구가 막지 못하는 것
@@ -315,6 +318,9 @@ helm lint --strict deploy/helm/dlp-proxy
 6. **response 차단 시점**: response를 막아도 upstream에 이미 보낸 request는 회수할 수 없다.
 7. **우회 경로**: 애플리케이션이 proxy를 사용하지 않으면 검사하지 못한다. egress
    firewall, NetworkPolicy, RBAC와 함께 사용해야 한다.
+8. **합성 출처 검증의 한계**: fixture manifest의 SHA-256·출처 선언·가시적 표식은 우발적
+   실제 데이터 반입을 어렵게 하는 변경 통제다. 값의 실제 세계 출처를 수학적으로 증명하지는
+   못하므로 코드 리뷰와 운영 데이터 반입 금지가 여전히 필요하다.
 
 ## 프로젝트 문서와 상태
 
@@ -323,6 +329,7 @@ helm lint --strict deploy/helm/dlp-proxy
 - 합성 데이터 정책: [`tests/data/README.md`](tests/data/README.md)
 - CI/CD: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 - 전체 실증 실행: [GitHub Actions #29485736882](https://github.com/ki0915/Mcp-Guard/actions/runs/29485736882) — 187개 테스트, GHCR 이미지 실제 푸시, k3d/Helm 설치, 합성 curl smoke 성공
+- 현재 로컬 회귀: 192 passed, 1 skipped; 최신 합성 fixture gate 포함. 원격 재실행 URL은 PR CI 완료 후 갱신한다.
 - Helm chart: [`deploy/helm/dlp-proxy`](deploy/helm/dlp-proxy)
 
 방어 목적의 포트폴리오 프로젝트다. 현재 저장소에는 재사용 조건을 정하는 `LICENSE`가

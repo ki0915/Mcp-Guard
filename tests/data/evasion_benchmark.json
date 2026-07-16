@@ -60,19 +60,19 @@
 
     {"id":"context-merger-ko-1","label":"sensitive","category":"contextual","text":"인수계획 문서의 후보대상 대상회사는 합성 오로라 법인이다.","expect_rules":["custom:merger-context"]},
     {"id":"context-merger-ko-2","label":"sensitive","category":"contextual","text":"합병검토 결과 검토대상 후보기업을 합성 베타로 정했다.","expect_rules":["custom:merger-context"]},
-    {"id":"context-merger-ko-3","label":"sensitive","category":"contextual","text":"후보기업 선정 전에 인수계획과 검토대상 조건을 논의한다.","expect_rules":["custom:merger-context"]},
+    {"id":"context-merger-ko-3","label":"sensitive","category":"contextual","text":"후보기업 선정 전에 인수계획과 검토대상 조건을 논의한다.","expect_rules":["custom:merger-context"],"note":"합성 이사회 문서 fixture"},
     {"id":"context-merger-en-1","label":"sensitive","category":"contextual","text":"The acquisition target company is Synthetic Aurora Ltd.","expect_rules":["custom:merger-context"]},
     {"id":"context-merger-en-2","label":"sensitive","category":"contextual","text":"A merger candidate vendor appears in the synthetic board memo.","expect_rules":["custom:merger-context"]},
     {"id":"context-roadmap-ko-1","label":"sensitive","category":"contextual","text":"출시계획에는 미공개정보인 신제품명 합성 네뷸라가 적혀 있다.","expect_rules":["custom:roadmap-context"]},
     {"id":"context-roadmap-ko-2","label":"sensitive","category":"contextual","text":"프로젝트명 합성 코멧의 배포일정은 사전공개금지 대상이다.","expect_rules":["custom:roadmap-context"]},
-    {"id":"context-roadmap-ko-3","label":"sensitive","category":"contextual","text":"미공개정보 신제품명과 출시계획을 함께 검토한다.","expect_rules":["custom:roadmap-context"]},
+    {"id":"context-roadmap-ko-3","label":"sensitive","category":"contextual","text":"미공개정보 신제품명과 출시계획을 함께 검토한다.","expect_rules":["custom:roadmap-context"],"note":"합성 roadmap fixture"},
     {"id":"context-roadmap-en-1","label":"sensitive","category":"contextual","text":"The unannounced product launch is named Synthetic Nebula.","expect_rules":["custom:roadmap-context"]},
     {"id":"context-roadmap-en-2","label":"sensitive","category":"contextual","text":"An embargoed project release appears on the synthetic roadmap.","expect_rules":["custom:roadmap-context"]},
 
-    {"id":"residual-double-base64","label":"sensitive","category":"residual","text":"blob TURFd0xUQXdNREF0TURBd01BPT0=","expect_kinds":["phone"],"note":"recursive decoding is intentionally disabled"},
+    {"id":"residual-double-base64","label":"sensitive","category":"residual","text":"blob TURFd0xUQXdNREF0TURBd01BPT0=","expect_kinds":["phone"],"note":"synthetic recursive decoding is intentionally disabled"},
     {"id":"residual-percent-body","label":"sensitive","category":"residual","text":"body=synthetic%20mobile%20010%2D0000%2D0000","expect_kinds":["phone"],"note":"percent decoding is scoped to URL path/query, not arbitrary body text"},
     {"id":"residual-slash-split","label":"sensitive","category":"residual","text":"synthetic mobile 010/0000/0000","expect_kinds":["phone"],"note":"punctuation compaction is deliberately disabled to control false positives"},
-    {"id":"residual-semantic-paraphrase","label":"sensitive","category":"residual","text":"이사회 승인 전 구매자가 특정 공급자를 흡수하는 안을 조용히 검토한다.","expect_rules":["custom:merger-context"],"note":"outside the operator-configured contextual vocabulary"},
+    {"id":"residual-semantic-paraphrase","label":"sensitive","category":"residual","text":"이사회 승인 전 구매자가 특정 공급자를 흡수하는 안을 조용히 검토한다.","expect_rules":["custom:merger-context"],"note":"합성 문서이며 outside the operator-configured contextual vocabulary"},
 
     {"id":"benign-plain-note","label":"benign","category":"benign-raw","text":"오늘 합성 테스트 회의는 오후 세 시에 시작합니다."},
     {"id":"benign-invalid-date","label":"benign","category":"benign-raw","text":"합성 번호 801301-1000000"},

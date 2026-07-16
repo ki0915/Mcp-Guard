@@ -33,6 +33,8 @@ jobs:
           bandit -q -r dlp_proxy scripts mock_upstream -s B104
       - name: Unit + e2e tests
         run: pytest -q
+      - name: Synthetic fixture admission control
+        run: python scripts/verify_synthetic_fixtures.py
       - name: Detection accuracy report
         run: python scripts/accuracy_report.py
       - name: Validate policy and Helm security schema

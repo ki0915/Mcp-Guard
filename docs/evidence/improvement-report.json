@@ -3,7 +3,7 @@
   "generated_at": "2026-07-11T12:41:08.139729+00:00",
   "dataset": {
     "path": "tests/data/evasion_benchmark.json",
-    "sha256": "166aa37c51db7c6445d603eb81f7b3443d9ae6a9330ca0ca1587084e47728945",
+    "sha256": "d8ceaa75ae850bfae9cacb2cd4b8f240f2186b2efe0272c608550f2b939a896a",
     "synthetic_only": true,
     "cases": 90,
     "positive_cases": 60,

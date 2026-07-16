@@ -14,3 +14,16 @@ credentials into these fixtures.
 Passing these small, synthetic sets measures regression behavior only. It is
 not evidence that the detector has the same recall or false-positive rate on
 production traffic.
+
+## Admission control
+
+`synthetic-manifest.json` registers every JSON dataset with an explicit
+provenance statement, case count, and SHA-256 digest. Sensitive cases must also
+contain a visible synthetic marker such as `synthetic`, `EXAMPLE`, `합성`, or
+`가상`, including inside a supported one-pass Base64 sample.
+
+Run `python scripts/verify_synthetic_fixtures.py` before committing fixture
+changes. CI rejects unregistered JSON files, byte changes without a reviewed
+manifest update, duplicate IDs, missing provenance, and sensitive examples
+without a marker. A marker and digest are change-control safeguards; they do
+not mathematically prove that submitted data never belonged to a real person.

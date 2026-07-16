@@ -95,6 +95,7 @@ flowchart LR
 | FR-014 | 고신뢰 `rrn`·`card`·`secret` kind/rule은 `alert`로 downgrade할 수 없고 알려지지 않은 override 이름은 거부해야 한다. |
 | FR-015 | `/policy/status`는 비밀 없는 `hardened`/`degraded` posture와 fail-open control 목록을 제공해야 한다. |
 | FR-016 | 사용자 정의 rule의 보호 kind(`rrn`, `card`, `secret`, `confidential`, `policy_error`)는 `block`/`redact`만 허용하고 kind 생략 시 `confidential`로 취급해야 한다. |
+| FR-017 | 모든 JSON fixture는 합성 전용 manifest에 출처·case 수·SHA-256으로 등록하고, 민감 case는 가시적 합성 표식을 가져야 하며 CI는 미등록·무표식·미검토 변경을 거부해야 한다. |
 
 ## 4. 탐지 계약
 
@@ -362,8 +363,8 @@ GHCR push와 k3d 배포까지 다음 순서로 수행한다.
 
 1. Python 설치와 개발 의존성 설치
 2. Ruff 및 Bandit(`dlp_proxy`, `scripts`, `mock_upstream`)
-3. 전체 pytest와 합성 정확도 리포트
-4. policy/protected-values validator
+3. 전체 pytest와 합성 fixture manifest 입장 통제
+4. 합성 정확도 리포트와 policy/protected-values validator
 5. strict Helm lint와 보안 스키마 negative test
 6. proxy/mock Docker build
 7. main push에서 GHCR push
@@ -380,7 +381,8 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 | 기준 | 검증 명령/증빙 | 현재 기준값 |
 |---|---|---|
 | 내장 탐지 회귀 | `python scripts/accuracy_report.py` | 케이스 단위 양성 35/35, 오탐 0/14(합성 fixture 한정) |
-| 회귀 테스트 | `pytest -q` | 187 passed, 1 POSIX-mode skip (2026-07-16) |
+| 회귀 테스트 | `pytest -q` | 192 passed, 1 POSIX-mode skip (2026-07-16) |
+| 합성 fixture 통제 | `python scripts/verify_synthetic_fixtures.py` | 등록 4/4 데이터셋, 총 145 cases 통과 |
 | 배포 재현 | [`docs/evidence/k8s-deploy-proof.txt`](evidence/k8s-deploy-proof.txt) | fresh Helm install, Ready, 실제 redact/block |
 | 성능 | `python bench/bench.py 200` | paired 평균 +3.10ms, p95 +3.65ms |
 | 정적/패키지 | Ruff, Bandit, actionlint, Helm strict lint, Docker build | 모두 통과 필요 |
@@ -395,7 +397,12 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 - 주민번호 fixture는 checksum 수학만 검증하는 all-zero serial 합성값을 사용한다.
 - 전화·계좌는 zero/nine-heavy placeholder, 카드는 payment-network test number를 사용한다.
 - 토큰은 `SYNTH-*`, `EXAMPLE`처럼 비운영임이 명백한 값만 사용한다.
+- 모든 JSON fixture는 `synthetic-manifest.json`에 출처·case 수·정확한 SHA-256을 등록한다.
+- 민감 case는 원문·note 또는 1회 Base64 decode 결과에 가시적 합성 표식이 있어야 한다.
 - 새로운 fixture는 [`tests/data/README.md`](../tests/data/README.md)의 정책을 따라야 한다.
+
+이 gate는 명시적 변경 검토를 강제하지만 실제 세계의 데이터 출처를 증명하지는 않는다.
+운영 로그·prompt·고객 데이터 반입 금지와 사람의 코드 리뷰를 대체할 수 없다.
 
 ## 13. 알려진 한계와 운영 결정
 
@@ -422,6 +429,7 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 | custom/protected | [`dlp_proxy/custom_rules.py`](../dlp_proxy/custom_rules.py) | [`tests/test_custom_policy.py`](../tests/test_custom_policy.py) |
 | protected CLI | [`dlp_proxy/registry_cli.py`](../dlp_proxy/registry_cli.py) | [`tests/test_protected_values_cli.py`](../tests/test_protected_values_cli.py) |
 | built-in detectors | [`dlp_proxy/detectors/`](../dlp_proxy/detectors/) | [`tests/test_detectors.py`](../tests/test_detectors.py) |
+| synthetic fixture gate | [`scripts/verify_synthetic_fixtures.py`](../scripts/verify_synthetic_fixtures.py) | [`tests/test_synthetic_fixture_guard.py`](../tests/test_synthetic_fixture_guard.py) |
 | Kubernetes | [`deploy/helm/dlp-proxy/`](../deploy/helm/dlp-proxy/) | Helm lint + k3d smoke evidence |
 | CI/CD | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | actionlint + GitHub Actions run |
 

@@ -35,6 +35,12 @@ Full local regression:
   Docker image: ghcr.io/ki0915/mcp-guard/proxy:synthetic-fixture-guard
   Image ID: sha256:c3b158ac3b11a0daa2c6040cfbeb2ed1f1c723b080eb74c7d4497388ab73b4d2
 
+Remote verification:
+  Commit: daa20a29bcdca4169b23feb861771ce44244818a
+  PR CI: https://github.com/ki0915/Mcp-Guard/actions/runs/29486791674 (success)
+  Full CI/CD: https://github.com/ki0915/Mcp-Guard/actions/runs/29486892909 (success)
+  Full path: 192 tests + fixture gate + GHCR push + fresh k3d/Helm + curl smoke
+
 Honest boundary:
   This is a review and change-control gate. A marker, provenance declaration,
   and digest do not mathematically prove that a submitted value never belonged

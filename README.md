@@ -11,7 +11,8 @@ HTTP reverse proxy와 newline-delimited stdio MCP adapter를 함께 제공한다
 
 ## 실측 결과
 
-2026-07-12 동일 workspace에서 재실행한 결과다. 자세한 방법·환경·실패 케이스는
+성능·배포는 2026-07-12, 전체 회귀와 레지스트리 안전장치는 2026-07-15 동일
+workspace에서 재실행한 결과다. 자세한 방법·환경·실패 케이스는
 [`실증 테스트 보고서`](docs/EMPIRICAL_REPORT.md)와 [`evidence`](docs/evidence/)에 있다.
 
 | 지표 | 실측값 | 범위 |
@@ -22,7 +23,7 @@ HTTP reverse proxy와 newline-delimited stdio MCP adapter를 함께 제공한다
 | enhanced scan 비용 | 평균 **+0.0440ms**, p95 **+0.0774ms** | 모드별 18,000 samples |
 | HTTP proxy overhead | 평균 **+3.10ms**, p95 **+3.65ms** | 1,102B, 200 paired localhost runs |
 | SSE event TTFB | 평균 **37.158ms → 4.892ms (-86.835%)** | 25ms gap, 모드별 100 runs |
-| 전체 테스트 | **165 passed, 1 skipped** | skip은 Windows의 POSIX mode 전용 1건 |
+| 전체 테스트 | **179 passed, 1 skipped** | 2026-07-15; skip은 Windows POSIX mode 전용 1건 |
 | fresh 배포 | Helm `deployed`, 2 pods `1/1 Running` | Docker 29.6.1, k3d 5.8.3 |
 
 이 수치는 저장소의 작은 합성 회귀셋과 로컬 환경에만 적용된다. “실서비스 탐지율
@@ -39,7 +40,7 @@ HTTP reverse proxy와 newline-delimited stdio MCP adapter를 함께 제공한다
 | API key·시크릿 | 알려진 prefix, JWT/PEM, assignment + Shannon entropy | `block` |
 | 문서 등급 | `대외비`, `CONFIDENTIAL`, `INTERNAL ONLY` 등 | `alert` |
 | 조직 고유 정보 | literal/timeout regex/contextual groups | rule별 설정 |
-| 실제 보호값 | Secret의 exact literal 또는 bounded token SHA-256 | 항목별 설정 |
+| 실제 보호값 | Secret의 exact literal 또는 bounded token SHA-256 | `block`/`redact`; `alert` 금지 |
 
 ### 우회 표현 완화
 
@@ -160,6 +161,8 @@ helm install dlp-proxy deploy/helm/dlp-proxy \
 ## 정책 설정
 
 비민감 정책은 [`configs/policy.yaml`](configs/policy.yaml)에 둔다.
+어떤 설정 방식을 골라야 하는지는 [`사용자 정책 가이드`](docs/POLICY_GUIDE.md)에
+literal·regex·contextual·보호값·예외의 선택 기준과 합성 예제가 정리되어 있다.
 
 ```yaml
 default_action: alert
@@ -182,7 +185,24 @@ scan:
 `event` SSE 모드는 complete event 하나를 검사한 뒤 즉시 중계한다. full-response buffering보다
 TTFB를 줄이지만 event 경계를 넘는 분할 의미는 재조립하지 않는다.
 
-### Contextual rule
+고신뢰 내장 kind(`rrn`, `card`, `secret`)와 해당 rule override는 `alert`로 낮출 수 없다.
+원문 전달을 막는 `block` 또는 `redact`만 허용하며, 오타 난 override 이름도 시작 시
+거부한다. `/policy/status`의 `posture`와 `fail_open_controls`는 request/response scan off,
+oversize/unscannable alert 같은 명시적 fail-open 상태를 비밀값 없이 보여준다.
+
+### 사용자 정의 정보
+
+| 설정 대상 | matcher | 저장 위치 |
+|---|---|---|
+| 고정된 비민감 분류어 | escaped `literal` | ConfigMap policy |
+| 사번·계약번호처럼 값의 형식 | timeout `regex` | ConfigMap policy |
+| 여러 개념이 가까이 있을 때만 기밀 | bounded `contextual` | ConfigMap policy |
+| 실제 코드명·토큰·식별값 | exact literal 또는 token SHA-256 | 기존 Kubernetes Secret |
+
+실제 기밀값을 `custom_rules.matcher.values`나 regex에 직접 넣지 않는다. ConfigMap과 Helm
+release history에 남을 수 있기 때문이다.
+
+#### Contextual rule
 
 범용 의미 모델이 아니라, 운영자가 정한 모든 literal 그룹이 한 window 안에 등장할 때
 동작하는 bounded matcher다. 입력 literal은 regex로 실행하지 않고 escape한다.
@@ -207,11 +227,29 @@ custom_rules:
 ### Protected-value registry
 
 실제 기밀값은 repository 밖의 Kubernetes Secret 파일에서만 읽는다. CLI는 hidden input과
-원자적 `0600` POSIX 파일 쓰기를 지원한다. Windows에서는 별도 파일 ACL을 제한해야 한다.
+원자적 `0600` POSIX 파일 쓰기를 지원한다. `alert`는 원문을 전달하므로 보호값에는
+설정할 수 없고 `block` 또는 `redact`만 허용한다. Windows에서는 별도 파일 ACL을 제한해야
+한다.
 
 ```bash
-dlp-protected-values add-literal --file protected-values.yaml
-dlp-protected-values add-sha256 --file protected-values.yaml
+# 원문·확인값을 터미널에 표시하지 않고 입력
+dlp-protected-values add-literal --file /secure/protected-values.yaml \
+  --id project-code --action block --direction request --direction response
+
+# 공백 없는 8~512자 토큰은 파일에 원문 대신 SHA-256과 길이만 저장
+dlp-protected-values add-token --file /secure/protected-values.yaml \
+  --id deploy-token --action block
+
+# 값·digest 없이 안전한 운영 메타데이터만 조회
+dlp-protected-values list --file /secure/protected-values.yaml
+
+# 숨김 입력이 실제 정책에서 block/redact 되는지 원문 없이 확인
+dlp-protected-values probe --file /secure/protected-values.yaml \
+  --direction request --method POST --path /v1/chat
+
+# ID로 정확히 한 항목만 검증 후 원자적으로 제거
+dlp-protected-values remove --file /secure/protected-values.yaml \
+  --section protected-values --id project-code
 ```
 
 예제 스키마: [`configs/protected-values.example.yaml`](configs/protected-values.example.yaml)
@@ -220,6 +258,10 @@ dlp-protected-values add-sha256 --file protected-values.yaml
 
 - 모든 finding에 `rid`, 방향, kind, rule, action을 JSON Lines로 기록
 - raw match 대신 항상 `sample="***"`; transform source만 비민감 metadata로 기록
+- 보호값은 `alert` 금지; 숨김 등록·safe list·hidden probe·검증된 원자적 삭제
+- RRN·카드·시크릿 kind/rule은 non-forwarding action floor 강제, override 오타 거부
+- `/policy/status`에서 `hardened`/`degraded`와 fail-open control 목록 제공
+- CLI가 repository 내부 보호값 파일 생성을 기본 거부하고 production loader로 선검증
 - body 최대 16MiB hard cap, query 16KiB/128 fields, finding 256개 상한
 - custom regex 1~100ms timeout, zero-width/match flood는 `policy_error` 차단
 - hop-by-hop 및 `Connection` 지목 header 제거
@@ -247,6 +289,7 @@ helm lint --strict deploy/helm/dlp-proxy
 | HTTP 200 paired runs | [`bench-result.json`](docs/evidence/bench-result.json) |
 | SSE 100 runs/mode | [`stream-bench-result.json`](docs/evidence/stream-bench-result.json) |
 | fresh k3d/Helm smoke | [`k8s-deploy-proof-20260712.txt`](docs/evidence/k8s-deploy-proof-20260712.txt) |
+| 기밀 정책·레지스트리 14개 안전장치 | [`registry-guardrails-20260715.txt`](docs/evidence/registry-guardrails-20260715.txt) |
 | 기술·보안 계약 | [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) |
 
 ## 이 도구가 막지 못하는 것
@@ -270,6 +313,7 @@ helm lint --strict deploy/helm/dlp-proxy
 ## 프로젝트 문서와 상태
 
 - 명세: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md)
+- 정책 설정 가이드: [`docs/POLICY_GUIDE.md`](docs/POLICY_GUIDE.md)
 - 합성 데이터 정책: [`tests/data/README.md`](tests/data/README.md)
 - CI/CD: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 - Helm chart: [`deploy/helm/dlp-proxy`](deploy/helm/dlp-proxy)

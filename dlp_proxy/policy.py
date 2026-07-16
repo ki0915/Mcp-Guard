@@ -30,6 +30,7 @@ from .detectors import Finding
 
 VALID_ACTIONS = frozenset({"redact", "block", "alert"})
 CONTROL_ACTIONS = frozenset({"block", "alert"})
+NON_FORWARDING_ACTIONS = frozenset({"redact", "block"})
 _BLOCK_ACTION = "block"
 SSE_MODES = frozenset({"buffer", "event"})
 PROTECTED_KINDS = frozenset({"rrn", "card", "secret", "confidential", "policy_error"})
@@ -65,6 +66,7 @@ _SCAN_REQUIRED = {
     "unscannable_action",
 }
 _SENSITIVE_KIND_ACTIONS = frozenset({"rrn", "card", "secret"})
+_LOW_CONFIDENCE_FORWARDING_RULES = frozenset({"rrn-format-only"})
 _RULE_NAME = re.compile(r"^[a-z][a-z0-9:._-]{0,127}$")
 _ENTRY_ID = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -192,8 +194,30 @@ class Policy:
         custom_count = sum(rule.rule.startswith("custom:") for rule in self.custom_rules)
         protected_count = sum(rule.rule.startswith("protected:") for rule in self.custom_rules)
         active = sum(entry.active(current) for entry in self.allowlist)
+        fail_open_controls = sorted(
+            name
+            for name, enabled in {
+                "request_scan_disabled": not self.scan_request,
+                "response_scan_disabled": not self.scan_response,
+                "oversize_alert": self.oversize_action == "alert",
+                "unscannable_alert": self.unscannable_action == "alert",
+                "sensitive_kind_forwarding": any(
+                    self.kind_actions.get(kind) not in NON_FORWARDING_ACTIONS
+                    for kind in _SENSITIVE_KIND_ACTIONS
+                ),
+                "sensitive_rule_forwarding": any(
+                    action not in NON_FORWARDING_ACTIONS
+                    and _BUILTIN_RULE_KINDS.get(rule) in _SENSITIVE_KIND_ACTIONS
+                    and rule not in _LOW_CONFIDENCE_FORWARDING_RULES
+                    for rule, action in self.rule_actions.items()
+                ),
+            }.items()
+            if enabled
+        )
         return {
             "status": "loaded",
+            "posture": "degraded" if fail_open_controls else "hardened",
+            "fail_open_controls": fail_open_controls,
             "custom_rules": custom_count,
             "protected_values": protected_count,
             "allowlist_active": active,
@@ -225,7 +249,20 @@ def load(path: str | None = None, protected_path: str | None = None) -> Policy:
     missing_sensitive_actions = _SENSITIVE_KIND_ACTIONS - kind_actions.keys()
     if missing_sensitive_actions:
         raise ValueError("rules must explicitly configure rrn, card, and secret")
+    for kind in _SENSITIVE_KIND_ACTIONS:
+        if kind_actions[kind] not in NON_FORWARDING_ACTIONS:
+            raise ValueError(f"rules.{kind} must be block or redact")
     rule_actions = _action_mapping(data.get("rule_overrides", {}), "rule_overrides")
+    for rule_name, action in rule_actions.items():
+        kind = _BUILTIN_RULE_KINDS.get(rule_name)
+        if kind is None:
+            raise ValueError("rule_overrides must target a known built-in detector rule")
+        if (
+            kind in _SENSITIVE_KIND_ACTIONS
+            and rule_name not in _LOW_CONFIDENCE_FORWARDING_RULES
+            and action not in NON_FORWARDING_ACTIONS
+        ):
+            raise ValueError(f"rule_overrides.{rule_name} must be block or redact")
 
     scan = _mapping(data.get("scan", {}), "scan")
     if strict:

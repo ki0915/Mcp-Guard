@@ -101,6 +101,11 @@
         "rules": {
           "type": "object",
           "required": ["rrn", "card", "secret"],
+          "properties": {
+            "rrn": {"$ref": "#/definitions/nonForwardingAction"},
+            "card": {"$ref": "#/definitions/nonForwardingAction"},
+            "secret": {"$ref": "#/definitions/nonForwardingAction"}
+          },
           "additionalProperties": {"$ref": "#/definitions/action"}
         },
         "rule_overrides": {
@@ -141,6 +146,7 @@
       }
     },
     "action": {"enum": ["redact", "block", "alert"]},
+    "nonForwardingAction": {"enum": ["redact", "block"]},
     "scope": {
       "type": "object",
       "additionalProperties": false,

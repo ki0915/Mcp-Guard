@@ -1,6 +1,8 @@
 # Mcp-Guard 실증 테스트 보고서
 
-> 측정일: 2026-07-12 KST · Python 3.12.13 · Windows 11 · Docker 29.6.1 · k3d 5.8.3
+> 성능·배포 측정일: 2026-07-12 KST · 레지스트리/전체 회귀 재검증: 2026-07-15 KST
+>
+> Python 3.12.13 · Windows 11 · Docker 29.6.1 · k3d 5.8.3
 
 이 보고서는 현재 구현을 **합성 데이터만으로** 재실행해 얻은 결과를 기록한다. 사용자,
 고객, 직원의 실제 개인정보와 운영 API key는 테스트·로그·이미지에 사용하지 않았다.
@@ -20,7 +22,7 @@
 | 실제 HTTP proxy 비용은 얼마인가? | 평균 +3.10ms, p95 +3.65ms | 200 paired runs |
 | SSE event 검사가 buffering TTFB를 줄이는가? | 평균 37.158ms → 4.892ms, **-86.835%** | 100 runs/mode |
 | 배포가 재현되는가? | fresh k3d + Helm, 2 pods Ready, 실제 redact/block | 통과 |
-| 코드 품질 gate가 통과하는가? | 165 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
+| 코드 품질 gate가 통과하는가? | 179 passed, 1 POSIX-only skip; Ruff/Bandit/actionlint/Helm 통과 | 통과 |
 
 ## 2. 정확도·오탐 실증
 
@@ -122,13 +124,36 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 
 | 검증 | 결과 |
 |---|---|
-| `pytest -q` | **165 passed, 1 skipped** in 1.54s |
+| 전체 pytest | **179 passed, 1 skipped** in 2.20s (2026-07-15) |
 | skip 사유 | Windows에서 POSIX file-mode 전용 test 1건 |
 | `ruff check .` | 통과 |
 | Bandit (`dlp_proxy scripts mock_upstream`) | 통과 |
 | `actionlint` | 통과 |
 | `helm lint --strict` | 0 failed |
 | Docker proxy/mock build | 통과 |
+
+### 4.1 기밀 정책·Protected-value 레지스트리 안전장치
+
+2026-07-15 변경에서 전용 합성 테스트 14건을 추가했다.
+
+| 검증 대상 | 결과 |
+|---|---|
+| protected `alert` 설정 | production loader가 거부 |
+| protected `redact` 설정 | 허용 후 실제 action 확인 |
+| safe inventory | literal·digest 비출력 확인 |
+| ID 기반 remove | exact 1건 제거, 실패 시 원본 보존 |
+| hidden probe 결과 | 원문·rule ID 없이 block metadata만 반환 |
+| scan off / oversize probe | 실제 policy control과 동일 판정 |
+| `rrn`/`card`/`secret` kind 3종 `alert` | loader와 Helm schema가 거부 |
+| 고신뢰 rule override 3종 `alert` | loader가 거부 |
+| 알 수 없는 rule override | 오타 가능성으로 시작 전 거부 |
+| policy posture | hardened/degraded와 fail-open 목록 확인 |
+
+설치된 `dlp-protected-values list`도 합성 registry에 실행해 ID·action·scope metadata는
+표시하면서 literal과 SHA-256 prefix가 출력되지 않음을 확인했다. 이는 비밀값 자체의
+안전성을 증명하는 보편적 수치가 아니라, 명시된 14개 관리 불변식의 회귀 결과다.
+명령과 비민감 결과는
+[`registry-guardrails-20260715.txt`](evidence/registry-guardrails-20260715.txt)에 고정했다.
 
 ## 5. fresh k3d / Helm 실증
 
@@ -157,7 +182,7 @@ event mode는 buffer 대비 평균 TTFB **32.266ms(86.835%)**, p95 **38.196ms**�
 
 다음 문장은 측정 범위를 함께 유지할 때만 사용한다.
 
-- “Python 기반 MCP/LLM outbound DLP를 설계하고 165개 자동화 테스트와 fresh k3d/Helm
+- “Python 기반 MCP/LLM outbound DLP를 설계하고 179개 자동화 테스트와 fresh k3d/Helm
   smoke test로 request/response redact·block·audit 불변식을 검증했다.”
 - “90건 합성 evasion regression corpus에서 raw-only 대비 case recall을 16.7%에서
   93.3%로 +76.7%p 개선했고, 고정 benign 30건의 오탐은 0건을 유지했다.”

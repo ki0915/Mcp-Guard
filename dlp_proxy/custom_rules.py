@@ -31,6 +31,7 @@ MAX_CONTEXT_LITERALS_PER_GROUP = 8
 MIN_CONTEXT_WINDOW_CHARS = 16
 MAX_CONTEXT_WINDOW_CHARS = 1024
 MAX_CONTEXT_LITERAL_CHARS = 128
+PROTECTED_ACTIONS = frozenset({"block", "redact"})
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 _KIND_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -186,7 +187,12 @@ def compile_custom_rules(raw: object, valid_actions: frozenset[str]) -> tuple[Co
 def compile_protected_values(
     raw: object, valid_actions: frozenset[str]
 ) -> tuple[CompiledRule, ...]:
-    """Compile exact literals or bounded SHA-256 token fingerprints."""
+    """Compile exact literals or bounded SHA-256 token fingerprints.
+
+    Protected values may never use ``alert`` because that action forwards the
+    original value unchanged.  Keep this invariant here (rather than only in
+    the CLI) so every loader and programmatic caller receives the same guard.
+    """
     items = _list(raw, "protected_values")
     if len(items) > MAX_PROTECTED_VALUES:
         raise ValueError(f"protected_values exceeds limit {MAX_PROTECTED_VALUES}")
@@ -202,7 +208,7 @@ def compile_protected_values(
             label,
         )
         rule_id = _rule_id(item.get("id"), label, seen)
-        action = _action(item.get("action"), valid_actions, label)
+        action = _action(item.get("action"), valid_actions & PROTECTED_ACTIONS, label)
         scope = _scope(item.get("scope"), label, require_narrow=False)
         literal = item.get("literal")
         digest = item.get("sha256")

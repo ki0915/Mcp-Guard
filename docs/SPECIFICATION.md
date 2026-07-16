@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 문서 상태 | 구현 기준(Implemented), 원격 Actions 증빙 Pending |
+| 문서 상태 | 구현 기준(Implemented) |
 | 명세 버전 | 1.0 |
 | 대상 애플리케이션 | `dlp-proxy` 0.1.x |
-| 최종 검증일 | 2026-07-11 |
+| 최종 검증일 | 2026-07-13 |
 | 구현 언어 | Python 3.12+ |
 
 이 문서는 외부 LLM API 또는 HTTP 기반 MCP 서버 앞에 배치하는 아웃바운드 DLP
@@ -29,20 +29,22 @@
 ### 1.2 지원 범위
 
 - HTTP/1.1 기반 LLM API와 일반 request/response형 HTTP MCP endpoint
+- newline-delimited JSON-RPC stdio MCP child adapter
 - 요청 본문, URL 경로, query key/value, 응답 본문
+- bounded complete-event SSE 검사 또는 full-response buffer 검사
 - `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
 - UTF-8, 명시된 유효 charset, charset 미지정 textual body의 cp949 폴백
 - Docker 컨테이너와 Kubernetes/Helm 배포
 
 ### 1.3 비범위
 
-- WebSocket·stdio MCP transport와 TRACE/CONNECT
+- WebSocket, non-newline/framed stdio transport와 TRACE/CONNECT
 - TLS를 프록시 밖에서 직접 종료하는 클라이언트의 우회 트래픽
 - 이미지·음성·PDF/OCR 등 바이너리 내용 분석
 - 의미 기반 분류, 사용자 의도 판별, 여러 요청에 나뉜 정보의 재조립
-- Base64·암호화·난독화·자연어 숫자 표기 전반의 자동 복원
+- 재귀 Base64·암호화·압축·난독화·자연어 숫자 표기 전반의 자동 복원
 - HTTP request/response header의 DLP 검사
-- SSE/토큰 스트림을 실시간으로 정화하면서 지연 없이 중계하는 기능
+- 여러 SSE event나 여러 request에 분할된 의미의 재조립
 
 ## 2. 신뢰 경계와 위협 모델
 
@@ -88,6 +90,10 @@ flowchart LR
 | FR-009 | 모든 finding과 fail-open/fail-closed 통제 판정을 구조화 감사 로그로 남겨야 한다. |
 | FR-010 | 유효하지 않은 정책·Secret은 애플리케이션 시작 전에 거부해야 한다. |
 | FR-011 | 운영 상태는 원문·matcher·digest·Secret 경로 없이 count와 fail mode만 제공해야 한다. |
+| FR-012 | Protected value의 action은 `block` 또는 `redact`만 허용하고 원문을 전달하는 `alert`는 거부해야 한다. |
+| FR-013 | 관리 CLI는 숨김 등록·숨김 probe·비밀 없는 목록·검증된 원자적 삭제를 제공해야 한다. |
+| FR-014 | 고신뢰 `rrn`·`card`·`secret` kind/rule은 `alert`로 downgrade할 수 없고 알려지지 않은 override 이름은 거부해야 한다. |
+| FR-015 | `/policy/status`는 비밀 없는 `hardened`/`degraded` posture와 fail-open control 목록을 제공해야 한다. |
 
 ## 4. 탐지 계약
 
@@ -172,11 +178,22 @@ allowlist: []
 | SHA-256 | 64자리 hex + `ascii_token` + 정확한 길이(8~512) 필수 |
 | SHA 후보 문자 | `A-Z a-z 0-9 _ . / + = : @ # $ % ! ? ~ -` |
 | kind | 항상 `confidential` |
+| action | `block` 또는 `redact`; `alert`는 production loader에서 거부 |
 | 중복 | 같은 literal/digest material 금지 |
 | reload | 시작 시 1회 로드; 변경은 새 versioned Secret과 rollout 필요 |
 
 SHA-256 방식은 임의 substring을 역검색하지 않는다. 공백 없는 bounded token에만 적합하며,
 저엔트로피 값은 digest 사전대입 위험이 있으므로 Secret literal을 사용해야 한다.
+
+관리 CLI `dlp-protected-values`는 다음 계약을 따른다.
+
+- `add-literal`, `add-token`, `add-allowlist`: 원문과 확인값을 hidden input으로만 받는다.
+- `list`: literal, digest, matcher를 제외한 ID/action/type/scope count만 출력한다.
+- `probe`: hidden input을 실제 scan/policy로 평가하고 판정·개수·kind 집계만 출력한다.
+- `remove`: ID가 정확히 한 번 존재할 때만 제거하고 production loader 검증 후 원자 교체한다.
+- 쓰기 명령은 repository 내부 경로를 기본 거부하고 POSIX에서 `0600` mode로 저장한다.
+
+사용자용 선택 기준과 명령 예시는 [`POLICY_GUIDE.md`](POLICY_GUIDE.md)를 따른다.
 
 ### 4.4 allowlist 계약
 
@@ -205,6 +222,8 @@ allowlist는 보호 kind가 아닌 오탐을 좁고 일시적으로 예외 처�
 4. 없으면 `default_action`을 적용한다.
 5. `policy_error`는 어떤 설정보다 우선해 `block`한다.
 6. 모든 겹침을 평가한 뒤 하나라도 `block`이면 redact보다 먼저 전체를 차단한다.
+7. `rrn`, `card`, `secret` kind와 고신뢰 built-in rule은 `block`/`redact`만 허용한다.
+8. 저신뢰 `rrn-format-only`만 명시적 `alert` override를 허용한다.
 
 ### 5.2 policy YAML
 
@@ -236,7 +255,7 @@ machine-readable source of truth다.
 | method/path | 성공 응답 | 계약 |
 |---|---|---|
 | `GET /healthz` | `200 {"status":"ok"}` | 프로세스 liveness; upstream 준비상태는 보장하지 않음 |
-| `GET /policy/status` | `200` JSON | 비민감 count/fail mode, `Cache-Control: no-store` |
+| `GET /policy/status` | `200` JSON | 비민감 count/fail mode/posture, `Cache-Control: no-store` |
 | `GET /metrics` | `200` text | Prometheus exposition |
 
 세 경로는 프록시가 점유하는 예약 endpoint이며 같은 upstream 경로로 전달할 수 없다.
@@ -359,9 +378,9 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 | 기준 | 검증 명령/증빙 | 현재 기준값 |
 |---|---|---|
 | 내장 탐지 회귀 | `python scripts/accuracy_report.py` | 케이스 단위 양성 35/35, 오탐 0/14(합성 fixture 한정) |
-| 회귀 테스트 | `pytest -q` | 120 cases; POSIX mode test는 Windows에서 skip |
+| 회귀 테스트 | `pytest -q` | 179 passed, 1 POSIX-mode skip (2026-07-15) |
 | 배포 재현 | [`docs/evidence/k8s-deploy-proof.txt`](evidence/k8s-deploy-proof.txt) | fresh Helm install, Ready, 실제 redact/block |
-| 성능 | `python bench/bench.py 200` | paired 평균 +2.67ms, p95 +3.23ms |
+| 성능 | `python bench/bench.py 200` | paired 평균 +3.10ms, p95 +3.65ms |
 | 정적/패키지 | Ruff, Bandit, actionlint, Helm strict lint, Docker build | 모두 통과 필요 |
 | CI 실행 | GitHub Actions run URL과 artifact | 원격 저장소 게시 후 README에 기록 |
 
@@ -379,13 +398,15 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 ## 13. 알려진 한계와 운영 결정
 
 1. 의미적 유출과 여러 요청에 나뉜 유출은 탐지하지 못한다.
-2. Base64, 전각 문자, 자연어 숫자, 임의 정규화·암호화는 우회할 수 있다.
+2. NFKC·digit compaction·bounded 1-pass Base64는 처리하지만 재귀 Base64, 자연어 숫자,
+   임의 정규화·암호화는 우회할 수 있다.
 3. 전화·계좌·entropy threshold에는 오탐/미탐 trade-off가 있다.
 4. 발급 시점은 판별하지 않으며 format-only RRN 후보의 기본 `alert`는 값을 통과시킨다.
-5. scan-enabled SSE는 응답 완료 또는 body 상한까지 first-token 지연이 발생한다.
+5. SSE `buffer`는 응답 완료까지 first-token 지연이 발생하며 `event`도 complete event까지
+   기다리고 event 경계를 넘는 분할 정보는 재조립하지 않는다.
 6. HTTP header는 검사하지 않으며 예약 관리 경로는 upstream으로 전달할 수 없다.
 7. 관리 endpoint는 인증이 없고 upstream readiness를 확인하지 않는다.
-8. 정책과 Secret은 hot reload하지 않는다. versioned Secret + rollout이 필수다.
+8. 정책과 Secret은 hot reload하지 않는다. 검증된 versioned Secret + rollout이 필수다.
 9. 앱이 프록시를 우회하면 검사할 수 없다. 네트워크 계층 강제가 별도로 필요하다.
 10. exact dependency lock은 있지만 package hash lock, SBOM 서명, 이미지 서명은 별도다.
 11. 응답 차단은 이미 upstream에 전송된 요청을 되돌리지 못하며 client 재노출만 막는다.
@@ -397,7 +418,7 @@ GitHub Actions는 최소 `contents: read`를 기본으로 하고 image push job�
 | HTTP proxy/control | [`dlp_proxy/app.py`](../dlp_proxy/app.py) | [`tests/test_proxy.py`](../tests/test_proxy.py) |
 | policy/allowlist | [`dlp_proxy/policy.py`](../dlp_proxy/policy.py) | [`tests/test_policy.py`](../tests/test_policy.py) |
 | custom/protected | [`dlp_proxy/custom_rules.py`](../dlp_proxy/custom_rules.py) | [`tests/test_custom_policy.py`](../tests/test_custom_policy.py) |
-| protected CLI | [`scripts/protected_values_cli.py`](../scripts/protected_values_cli.py) | [`tests/test_protected_values_cli.py`](../tests/test_protected_values_cli.py) |
+| protected CLI | [`dlp_proxy/registry_cli.py`](../dlp_proxy/registry_cli.py) | [`tests/test_protected_values_cli.py`](../tests/test_protected_values_cli.py) |
 | built-in detectors | [`dlp_proxy/detectors/`](../dlp_proxy/detectors/) | [`tests/test_detectors.py`](../tests/test_detectors.py) |
 | Kubernetes | [`deploy/helm/dlp-proxy/`](../deploy/helm/dlp-proxy/) | Helm lint + k3d smoke evidence |
 | CI/CD | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | actionlint + GitHub Actions run |

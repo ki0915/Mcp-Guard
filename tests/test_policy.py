@@ -57,3 +57,55 @@ def test_invalid_sse_mode_rejected(tmp_path: Path) -> None:
     bad.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(ValueError, match="sse_mode must be buffer or event"):
         policy_mod.load(str(bad))
+
+
+@pytest.mark.parametrize("kind", ["rrn", "card", "secret"])
+def test_sensitive_kind_cannot_forward_raw_text(tmp_path: Path, kind: str) -> None:
+    data = yaml.safe_load(Path("configs/policy.yaml").read_text(encoding="utf-8"))
+    data["rules"][kind] = "alert"
+    path = tmp_path / f"unsafe-{kind}.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"rules\.{kind} must be block or redact"):
+        policy_mod.load(str(path))
+
+
+@pytest.mark.parametrize("rule", ["rrn-checksum", "card-luhn", "aws-access-key"])
+def test_sensitive_rule_override_cannot_forward_raw_text(
+    tmp_path: Path, rule: str
+) -> None:
+    data = yaml.safe_load(Path("configs/policy.yaml").read_text(encoding="utf-8"))
+    data["rule_overrides"][rule] = "alert"
+    path = tmp_path / "unsafe-rule-override.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"rule_overrides\.{rule} must be block or redact"):
+        policy_mod.load(str(path))
+
+
+def test_unknown_rule_override_is_rejected_as_a_probable_typo(tmp_path: Path) -> None:
+    data = yaml.safe_load(Path("configs/policy.yaml").read_text(encoding="utf-8"))
+    data["rule_overrides"]["aws-access-kye"] = "block"
+    path = tmp_path / "unknown-rule-override.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="known built-in detector rule"):
+        policy_mod.load(str(path))
+
+
+def test_safe_summary_reports_hardened_and_degraded_posture() -> None:
+    hardened = policy_mod.load("configs/policy.yaml").safe_summary()
+    assert hardened["posture"] == "hardened"
+    assert hardened["fail_open_controls"] == []
+
+    degraded = policy_mod.Policy(
+        scan_response=False,
+        oversize_action="alert",
+        kind_actions={"rrn": "alert", "card": "block", "secret": "block"},
+    ).safe_summary()
+    assert degraded["posture"] == "degraded"
+    assert degraded["fail_open_controls"] == [
+        "oversize_alert",
+        "response_scan_disabled",
+        "sensitive_kind_forwarding",
+    ]

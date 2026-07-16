@@ -40,6 +40,12 @@ jobs:
           python scripts/validate_policy.py
           python scripts/validate_policy.py \
             --protected-values configs/protected-values.example.yaml
+          dlp-protected-values list \
+            --file configs/protected-values.example.yaml \
+            >/tmp/registry-inventory.json
+          grep -q 'synthetic-project-code' /tmp/registry-inventory.json
+          ! grep -q 'SYNTH-ORION-ALPHA-7Q9X' /tmp/registry-inventory.json
+          ! grep -q '9bd61dd3c0bb782b' /tmp/registry-inventory.json
           helm lint --strict deploy/helm/dlp-proxy
           helm template dlp-proxy deploy/helm/dlp-proxy \
             --set protectedValues.existingSecret=dlp-protected-v1 \
@@ -58,6 +64,11 @@ jobs:
           if helm template dlp-proxy deploy/helm/dlp-proxy \
             --set policy.strict_config=false >/tmp/non-strict-policy.txt 2>&1; then
             echo 'values.schema.json accepted strict_config=false' >&2
+            exit 1
+          fi
+          if helm template dlp-proxy deploy/helm/dlp-proxy \
+            --set policy.rules.secret=alert >/tmp/forwarding-secret.txt 2>&1; then
+            echo 'values.schema.json accepted forwarding secret action' >&2
             exit 1
           fi
           if helm template dlp-proxy deploy/helm/dlp-proxy \

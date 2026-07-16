@@ -426,6 +426,49 @@ def test_example_protected_values_file_is_valid() -> None:
     assert loaded.safe_summary()["protected_values"] == 2
 
 
+def test_protected_values_cannot_use_alert_because_it_forwards_raw_text(
+    tmp_path: Path,
+) -> None:
+    protected_path = _write_yaml(
+        tmp_path / "unsafe-alert.yaml",
+        {
+            "version": 1,
+            "protected_values": [
+                {
+                    "id": "unsafe-alert",
+                    "action": "alert",
+                    "literal": "SYNTH-ALERT-MUST-FAIL-7Q9X",
+                }
+            ],
+            "allowlist": [],
+        },
+    )
+
+    with pytest.raises(ValueError, match="action is invalid"):
+        policy.load("configs/policy.yaml", str(protected_path))
+
+
+def test_protected_values_may_use_redact(tmp_path: Path) -> None:
+    protected_path = _write_yaml(
+        tmp_path / "safe-redact.yaml",
+        {
+            "version": 1,
+            "protected_values": [
+                {
+                    "id": "safe-redact",
+                    "action": "redact",
+                    "literal": "SYNTH-REDACT-IS-SAFE-7Q9X",
+                }
+            ],
+            "allowlist": [],
+        },
+    )
+
+    loaded = policy.load("configs/policy.yaml", str(protected_path))
+    finding = Scanner(loaded.custom_rules).scan("SYNTH-REDACT-IS-SAFE-7Q9X")[0]
+    assert loaded.action_for(finding) == "redact"
+
+
 @pytest.mark.parametrize(
     "mutator,match",
     [

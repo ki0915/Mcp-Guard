@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}/proxy
-  MOCK_IMAGE: ghcr.io/${{ github.repository }}/mock-upstream
+  IMAGE: ghcr.io/ki0915/mcp-guard/proxy
+  MOCK_IMAGE: ghcr.io/ki0915/mcp-guard/mock-upstream
 
 jobs:
   lint-test:
